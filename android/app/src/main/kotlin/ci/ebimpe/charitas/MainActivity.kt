@@ -14,6 +14,12 @@ import ci.ebimpe.charitas.core.security.AppPreferencesState
 import ci.ebimpe.charitas.ui.CharitasRootScaffold
 import ci.ebimpe.charitas.ui.components.SplashScreen
 import ci.ebimpe.charitas.ui.theme.CharitasTheme
+import ci.ebimpe.charitas.update.InAppUpdateChecker
+import ci.ebimpe.charitas.update.UpdateCheckResult
+import ci.ebimpe.charitas.update.AppVersionInfo
+import ci.ebimpe.charitas.ui.components.InAppUpdateDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,12 +34,17 @@ class MainActivity : ComponentActivity() {
             val memberships by container.repository.memberships.collectAsState()
             val activeChurchId by container.repository.activeChurchId.collectAsState()
             var showSplash by remember { mutableStateOf(true) }
+            var updateInfo by remember { mutableStateOf<AppVersionInfo?>(null) }
 
             val activeMembership = memberships.firstOrNull { it.churchId == activeChurchId } ?: memberships.firstOrNull()
 
             LaunchedEffect(Unit) {
                 container.bibleImporter.ensureImported()
                 container.repository.restoreSessionIfPresent()
+                when (val result = InAppUpdateChecker.check()) {
+                    is UpdateCheckResult.Available -> updateInfo = result.info
+                    else -> Unit
+                }
             }
 
             // Automatically flush offline Outbox queue whenever network returns
@@ -52,6 +63,19 @@ class MainActivity : ComponentActivity() {
                     SplashScreen(onFinished = { showSplash = false })
                 } else {
                     CharitasRootScaffold(container = container)
+                    updateInfo?.let { info ->
+                        InAppUpdateDialog(
+                            info = info,
+                            onDismiss = { updateInfo = null },
+                            onUpdate = {
+                                val ctx = this@MainActivity
+                                if (InAppUpdateChecker.enqueueApkDownload(ctx, info) == null) {
+                                    InAppUpdateChecker.openPageOrApk(ctx, info)
+                                }
+                                if (!info.forceUpdate) updateInfo = null
+                            }
+                        )
+                    }
                 }
             }
         }
