@@ -75,6 +75,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
   const hlsRef = useRef<Hls | null>(null);
   const appliedInitialSeekRef = useRef(false);
   const hasUserUnmutedRef = useRef(!autoPlayMuted);
+  const hasErrorRef = useRef(false);
   const onPlaybackReadyRef = useRef(onPlaybackReady);
   const onPlaybackFailedRef = useRef(onPlaybackFailed);
 
@@ -114,6 +115,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
 
   useEffect(() => {
     appliedInitialSeekRef.current = false;
+    hasErrorRef.current = false;
     setErrorMsg(null);
     setErrorDetail(null);
     setQualityLevels([]);
@@ -204,6 +206,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
 
     const watchdogTimer = setTimeout(() => {
       if (!cancelled && !playbackConfirmed) {
+        hasErrorRef.current = true;
         setIsBuffering(false);
         setIsPlaying(false);
         setErrorMsg('Cette chaîne est temporairement indisponible.');
@@ -234,6 +237,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
 
     const handleCanPlay = () => {
       if (cancelled) return;
+      hasErrorRef.current = false;
       setIsBuffering(false);
       setErrorMsg(null);
       setErrorDetail(null);
@@ -241,7 +245,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
     };
 
     const handleWaiting = () => {
-      if (cancelled || errorMsg) return;
+      if (cancelled || hasErrorRef.current) return;
       setIsBuffering(true);
       setConnectionLabel('Connexion au flux...');
     };
@@ -249,6 +253,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
     const handlePlaying = () => {
       if (cancelled) return;
       playbackConfirmed = true;
+      hasErrorRef.current = false;
       setIsPlaying(true);
       setIsBuffering(false);
       setErrorMsg(null);
@@ -260,7 +265,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
     const handlePause = () => {
       if (cancelled) return;
       setIsPlaying(false);
-      if (!errorMsg) {
+      if (!hasErrorRef.current) {
         setConnectionLabel('Lecture en pause.');
       }
     };
@@ -269,6 +274,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
       if (cancelled) return;
       if ((video.currentTime || 0) > 0.1 && !playbackConfirmed) {
         playbackConfirmed = true;
+        hasErrorRef.current = false;
         setIsBuffering(false);
         setIsPlaying(!video.paused);
         setConnectionLabel('Lecture en cours.');
@@ -282,6 +288,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
 
     const handleNativeError = () => {
       if (cancelled) return;
+      hasErrorRef.current = true;
       setIsBuffering(false);
       setIsPlaying(false);
       setErrorMsg('Impossible de lire cette chaîne.');
@@ -305,11 +312,16 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: Boolean(source.isLive),
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 10,
         backBufferLength: 60,
         maxBufferLength: 30,
         manifestLoadingTimeOut: 9000,
+        manifestLoadingMaxRetry: 2,
         levelLoadingTimeOut: 9000,
+        levelLoadingMaxRetry: 2,
         fragLoadingTimeOut: 9000,
+        fragLoadingMaxRetry: 3,
       });
       hlsRef.current = hls;
 
@@ -363,6 +375,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
           return;
         }
 
+        hasErrorRef.current = true;
         setIsBuffering(false);
         setIsPlaying(false);
         const httpStatus = data.response?.code;

@@ -55,10 +55,14 @@ function cleanOptionalText(raw: unknown, maxLen = 500): string | null {
 
 // ==================== PUBLIC VISITOR ROUTES (NO SIGN-UP REQUIRED) ====================
 
+const publicRefreshCooldownByChurch = new Map<number, number>();
+const publicSingleProbeCooldown = new Map<number, number>();
+
 tvRouter.get('/public/tv/catalog', async (req, res) => {
   try {
     await ensureStarterChurches();
     const requestedChurchId = req.query.churchId ? Number(req.query.churchId) : null;
+    const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
     const categoryFilter =
       typeof req.query.category === 'string' ? req.query.category.trim() : '';
     const searchFilter =
@@ -83,6 +87,15 @@ tvRouter.get('/public/tv/catalog', async (req, res) => {
         recommendedChannels: [],
         broadcasts: [],
       });
+    }
+
+    if (forceRefresh) {
+      const now = Date.now();
+      const lastRun = publicRefreshCooldownByChurch.get(targetChurch.id) || 0;
+      if (now - lastRun > 25_000) {
+        publicRefreshCooldownByChurch.set(targetChurch.id, now);
+        await runChurchChannelsHealthCheck(targetChurch.id);
+      }
     }
 
     const data = await withTenantContext(
@@ -147,6 +160,7 @@ tvRouter.get('/public/tv/catalog', async (req, res) => {
       churchId: targetChurch.id,
       churchName: targetChurch.name,
       categories: [...TV_CATEGORIES],
+      verifiedAt: new Date().toISOString(),
       ...data,
     });
   } catch (error) {
@@ -193,6 +207,70 @@ tvRouter.get('/public/tv/channels/:channelId', async (req, res) => {
   } catch (error) {
     console.error('Public single TV channel error:', error);
     return res.status(500).json({ error: 'Erreur lors du chargement de la chaîne.' });
+  }
+});
+
+/**
+ * Allows Web or Mobile players experiencing a live stream failure to request an immediate
+ * server-side re-probe. The server never blindly trusts client reports: it runs probeStreamUrl()
+ * itself before updating streamStatus and notifying connected clients via WebSocket.
+ */
+tvRouter.post('/public/tv/channels/:channelId/verify-now', async (req, res) => {
+  try {
+    const channelId = Number(req.params.channelId);
+    if (!Number.isInteger(channelId) || channelId <= 0) {
+      return res.status(400).json({ error: 'Identifiant de chaîne invalide.' });
+    }
+
+    const existing = await withTenantContext({ isSuperAdmin: true }, async (tx) => {
+      const [ch] = await tx.select().from(tvChannels).where(eq(tvChannels.id, channelId)).limit(1);
+      if (!ch) return null;
+      const [church] = await tx
+        .select({ id: churches.id, isPublic: churches.isPublic, status: churches.status })
+        .from(churches)
+        .where(eq(churches.id, ch.churchId))
+        .limit(1);
+      if (!church || !church.isPublic || church.status !== 'active') return null;
+      return ch;
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Chaîne introuvable.' });
+    }
+
+    const now = Date.now();
+    const lastProbe = publicSingleProbeCooldown.get(channelId) || 0;
+    if (now - lastProbe < 15_000) {
+      return res.json({ channel: existing, throttled: true });
+    }
+    publicSingleProbeCooldown.set(channelId, now);
+
+    const probe = await probeStreamUrl(existing.streamUrl);
+    const [updated] = await withTenantContext(
+      { churchId: existing.churchId, isSuperAdmin: true },
+      async (tx) =>
+        tx
+          .update(tvChannels)
+          .set({
+            streamStatus: probe.status,
+            httpStatus: probe.httpStatus,
+            lastCheckError: probe.error,
+            lastCheckedAt: new Date(probe.checkedAt),
+            streamFormat: probe.detectedFormat,
+            updatedAt: new Date(),
+          })
+          .where(eq(tvChannels.id, channelId))
+          .returning()
+    );
+
+    if (updated.streamStatus !== existing.streamStatus) {
+      broadcastToChurch(existing.churchId, 'tv:live_update', { channelId: updated.id, streamStatus: updated.streamStatus });
+    }
+
+    return res.json({ channel: updated, probe, throttled: false });
+  } catch (error) {
+    console.error('Public single channel verify-now error:', error);
+    return res.status(500).json({ error: 'Erreur lors de la vérification en direct du flux.' });
   }
 });
 

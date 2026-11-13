@@ -418,10 +418,17 @@ data class TvBroadcastDto(
 data class PublicTvCatalogResponseDto(
     val churchId: Int = 0,
     val churchName: String = "",
+    val verifiedAt: String? = null,
     val categories: List<String> = emptyList(),
     val channels: List<TvChannelDto> = emptyList(),
     val recommendedChannels: List<TvChannelDto> = emptyList(),
     val broadcasts: List<TvBroadcastDto> = emptyList()
+)
+
+@Serializable
+data class VerifyTvChannelResponseDto(
+    val channel: TvChannelDto? = null,
+    val throttled: Boolean = false
 )
 
 @Serializable

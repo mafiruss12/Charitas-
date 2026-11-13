@@ -9,6 +9,7 @@ import {
   Loader2,
   Play,
   Radio,
+  RefreshCw,
   Search,
   Share2,
   SlidersHorizontal,
@@ -75,12 +76,16 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSelection, setActiveSelection] = useState<ActiveSelection | null>(null);
 
-  const loadTvData = useCallback(async () => {
-    setLoading(true);
+  const [verifyingLive, setVerifyingLive] = useState(false);
+
+  const loadTvData = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) setVerifyingLive(true);
+    else setLoading(true);
     setError(null);
     try {
       const qs = new URLSearchParams();
       if (churchId) qs.set('churchId', String(churchId));
+      if (forceRefresh) qs.set('refresh', '1');
       const publicCatalog = await apiFetch<PublicTvCatalogResponse>(
         `/api/public/tv/catalog${qs.toString() ? `?${qs.toString()}` : ''}`
       );
@@ -101,7 +106,15 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
       }
 
       setActiveSelection((prev) => {
-        if (prev) return prev;
+        if (prev) {
+          if (prev.kind === 'channel') {
+            const stillOperational = publicCatalog.channels.find((c) => c.id === prev.item.id);
+            if (stillOperational) return { ...prev, item: stillOperational };
+          } else {
+            const stillVisible = publicCatalog.broadcasts.find((b) => b.id === prev.item.id);
+            if (stillVisible) return { ...prev, item: stillVisible };
+          }
+        }
         const liveBroadcast = publicCatalog.broadcasts.find((b) => b.status === 'live');
         if (liveBroadcast) {
           return { kind: 'broadcast', item: liveBroadcast, autoSelected: true };
@@ -119,12 +132,20 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
         }
         return null;
       });
+      if (forceRefresh) {
+        setFailedChannelIds([]);
+        setShareToast(
+          `${publicCatalog.channels.length} chaîne(s) vérifiée(s) en direct en temps réel.`
+        );
+        setTimeout(() => setShareToast(null), 3500);
+      }
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : 'Impossible de charger CHARITAS TV pour le moment.'
       );
     } finally {
       setLoading(false);
+      setVerifyingLive(false);
     }
   }, [churchId, isAuthenticated]);
 
@@ -296,10 +317,35 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
   const handlePlayerFailure = useCallback(() => {
     if (activeSelection?.kind === 'channel') {
       const failedId = activeSelection.item.id;
-      setFailedChannelIds((prev) => (prev.includes(failedId) ? prev : [...prev, failedId]));
+      const nextFailed = failedChannelIds.includes(failedId)
+        ? failedChannelIds
+        : [...failedChannelIds, failedId];
+      setFailedChannelIds(nextFailed);
+
+      // Ask backend to re-probe this stream immediately in real time
+      apiFetch<{ channel: TvChannelItem }>(`/api/public/tv/channels/${failedId}/verify-now`, {
+        method: 'POST',
+      })
+        .then((res) => {
+          if (res.channel && res.channel.streamStatus !== 'operational') {
+            setCatalog((prevCat) =>
+              prevCat
+                ? {
+                    ...prevCat,
+                    channels: prevCat.channels.filter((c) => c.id !== failedId),
+                    recommendedChannels: prevCat.recommendedChannels.filter(
+                      (c) => c.id !== failedId
+                    ),
+                  }
+                : prevCat
+            );
+          }
+        })
+        .catch(() => {});
+
       if (activeSelection.autoSelected) {
         const fallback = (catalog?.channels || []).find(
-          (c) => c.id !== failedId && !failedChannelIds.includes(c.id)
+          (c) => c.id !== failedId && !nextFailed.includes(c.id)
         );
         if (fallback) {
           setActiveSelection({ kind: 'channel', item: fallback, autoSelected: true });
@@ -380,6 +426,15 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              disabled={verifyingLive}
+              onClick={() => loadTvData(true)}
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-white/12 hover:bg-white/20 disabled:opacity-60 border border-white/20 text-white text-xs font-semibold inline-flex items-center gap-2 cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${verifyingLive ? 'animate-spin text-[#F5B82E]' : ''}`} />
+              {verifyingLive ? 'Vérification en direct...' : 'Vérifier les flux en direct'}
+            </button>
             {canManageStreams && onOpenAdminPanel && (
               <button
                 type="button"

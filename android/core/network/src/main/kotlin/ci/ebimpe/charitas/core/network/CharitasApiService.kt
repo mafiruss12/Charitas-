@@ -124,8 +124,12 @@ interface CharitasApiService {
     suspend fun getPublicTvCatalog(
         @Query("churchId") churchId: Int? = null,
         @Query("category") category: String? = null,
-        @Query("search") search: String? = null
+        @Query("search") search: String? = null,
+        @Query("refresh") refresh: Int? = null
     ): Response<PublicTvCatalogResponseDto>
+
+    @POST("api/public/tv/channels/{channelId}/verify-now")
+    suspend fun verifyTvChannelNow(@Path("channelId") channelId: Int): Response<VerifyTvChannelResponseDto>
 
     @POST("api/public/visitor-contact")
     suspend fun submitVisitorContact(@Body body: VisitorContactRequest): Response<MessageResponseDto>

@@ -288,10 +288,50 @@ class CharitasRepository(
         }
     }
 
-    suspend fun loadTvCatalog(churchId: Int, category: String? = null, search: String? = null): RepoResult<PublicTvCatalogResponseDto> =
-        fetchWithOfflineCache("public:tv:$churchId:${category ?: "all"}", isPrivate = false) {
-            api.getPublicTvCatalog(churchId, category = category, search = search)
+    suspend fun loadTvCatalog(
+        churchId: Int,
+        category: String? = null,
+        search: String? = null,
+        forceRefresh: Boolean = false
+    ): RepoResult<PublicTvCatalogResponseDto> {
+        val normalizedSearch = search?.trim()?.ifBlank { null }
+        val refreshParam = if (forceRefresh) 1 else null
+        if (normalizedSearch != null) {
+            if (!networkMonitor.refreshNow()) {
+                val cached = cacheDao.getCachedJson("public:tv:$churchId:${category ?: "all"}")
+                    ?.let { runCatching { json.decodeFromString<PublicTvCatalogResponseDto>(it.payloadJson) }.getOrNull() }
+                if (cached != null) {
+                    val q = normalizedSearch.lowercase()
+                    val filtered = cached.channels.filter {
+                        "${it.name} ${it.category} ${it.language} ${it.country ?: ""} ${it.currentProgram ?: ""}".lowercase().contains(q)
+                    }
+                    return RepoResult.Success(cached.copy(channels = filtered), fromCache = true)
+                }
+                return RepoResult.Error("Contenu indisponible hors connexion.")
+            }
+            return try {
+                val res = api.getPublicTvCatalog(churchId, category = category, search = normalizedSearch, refresh = refreshParam)
+                if (res.isSuccessful && res.body() != null) {
+                    RepoResult.Success(res.body()!!, fromCache = false)
+                } else {
+                    RepoResult.Error(NetworkClientFactory.parseErrorMessage(res))
+                }
+            } catch (e: Exception) {
+                RepoResult.Error(e.message ?: "Erreur réseau CHARITAS TV.")
+            }
         }
+        return fetchWithOfflineCache("public:tv:$churchId:${category ?: "all"}", isPrivate = false) {
+            api.getPublicTvCatalog(churchId, category = category, search = null, refresh = refreshParam)
+        }
+    }
+
+    suspend fun verifyTvChannelNow(channelId: Int): TvChannelDto? {
+        if (!networkMonitor.refreshNow()) return null
+        return runCatching {
+            val res = api.verifyTvChannelNow(channelId)
+            if (res.isSuccessful) res.body()?.channel else null
+        }.getOrNull()
+    }
 
     suspend fun loadPublicMedia(churchId: Int): RepoResult<MediaResponseDto> =
         fetchWithOfflineCache("public:media:$churchId", isPrivate = false) { api.getPublicMedia(churchId) }

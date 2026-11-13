@@ -526,20 +526,66 @@ async function readBoundedBodyText(response: Response, limitBytes = 65536): Prom
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function extractFirstHlsReference(manifestText: string): { uri: string; isVariantList: boolean } | null {
+function extractAllHlsPlaylistReferences(manifestText: string): {
+  variants: { uri: string; codecs: string | null }[];
+  audioUris: string[];
+  segments: string[];
+} {
   const lines = manifestText.replace(/\r\n/g, '\n').split('\n');
-  const isVariantList = /#EXT-X-STREAM-INF/i.test(manifestText);
+  const variants: { uri: string; codecs: string | null }[] = [];
+  const audioUris: string[] = [];
+  const segments: string[] = [];
+
+  let pendingCodecs: string | null = null;
+  let expectingVariantUri = false;
+
   for (const raw of lines) {
     const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    return { uri: line, isVariantList };
+    if (!line) continue;
+
+    if (line.startsWith('#EXT-X-MEDIA:')) {
+      const uriMatch = line.match(/URI="([^"]+)"/i);
+      if (uriMatch?.[1] && /TYPE=AUDIO/i.test(line)) {
+        audioUris.push(uriMatch[1]);
+      }
+      continue;
+    }
+
+    if (line.startsWith('#EXT-X-STREAM-INF:')) {
+      const codecMatch = line.match(/CODECS="([^"]+)"/i);
+      pendingCodecs = codecMatch?.[1] || null;
+      expectingVariantUri = true;
+      continue;
+    }
+
+    if (line.startsWith('#')) continue;
+
+    if (expectingVariantUri) {
+      variants.push({ uri: line, codecs: pendingCodecs });
+      pendingCodecs = null;
+      expectingVariantUri = false;
+    } else {
+      segments.push(line);
+    }
   }
-  return null;
+
+  return { variants, audioUris, segments };
+}
+
+function isWebSupportedCodecList(codecs: string | null): boolean {
+  if (!codecs) return true;
+  const lower = codecs.toLowerCase();
+  // Reject HEVC/H.265-only streams that Chrome/Firefox HTML5/HLS.js cannot decode universally
+  const hasHevc = /\b(hvc1|hev1)\./.test(lower);
+  const hasAvcOrVp9 = /\b(avc1|avc3|vp09|av01)\./.test(lower);
+  if (hasHevc && !hasAvcOrVp9) return false;
+  return true;
 }
 
 /**
  * Deeply probes a stream or embed URL safely (SSRF-guarded, no open proxy, no DRM/geo bypass).
- * Verifies HTTPS compatibility, CORS headers for web HLS.js, manifest structure, nested variant playlist, and first video segment reachability.
+ * Verifies HTTPS compatibility, strict CORS headers across manifest + variant + audio + live segment,
+ * codec compatibility, and real live-edge segment reachability.
  */
 export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult> {
   const checkedAt = new Date().toISOString();
@@ -631,11 +677,11 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
       method: 'GET',
       headers: {
         Origin: originHeader,
-        'User-Agent': 'CharitasTV-HealthMonitor/2.0',
+        'User-Agent': 'CharitasTV-HealthMonitor/2.1',
         Accept: 'application/vnd.apple.mpegurl, application/x-mpegurl, video/*, */*',
       },
       redirect: 'follow',
-      signal: AbortSignal.timeout(7000),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (response.url) {
@@ -745,7 +791,6 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
       };
     }
 
-    // HLS Validation: require actual #EXTM3U header
     if (!snippet.includes('#EXTM3U')) {
       return {
         status: 'unavailable',
@@ -759,12 +804,10 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
       };
     }
 
-    // Deep check child playlist and first media segment (never stop at HTTP 200 master manifest!)
-    let currentManifestText = snippet;
     let currentBaseUrl = response.url || safeUrl.toString();
-    let ref = extractFirstHlsReference(currentManifestText);
+    const parsedMaster = extractAllHlsPlaylistReferences(snippet);
 
-    if (!ref) {
+    if (parsedMaster.variants.length === 0 && parsedMaster.segments.length === 0) {
       return {
         status: 'unavailable',
         httpStatus: response.status,
@@ -777,9 +820,27 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
       };
     }
 
-    // Follow master -> variant media playlist if needed (at most 2 hops)
-    if (ref.isVariantList || /\.m3u8(\?.*)?$/i.test(ref.uri)) {
-      const variantUrl = assertSafeHttpUrl(new URL(ref.uri, currentBaseUrl).toString());
+    let activeSegments = parsedMaster.segments;
+
+    if (parsedMaster.variants.length > 0) {
+      const compatibleVariant =
+        parsedMaster.variants.find((v) => isWebSupportedCodecList(v.codecs)) ||
+        parsedMaster.variants[0];
+
+      if (!isWebSupportedCodecList(compatibleVariant.codecs)) {
+        return {
+          status: 'incompatible',
+          httpStatus: response.status,
+          error: `Codec vidéo non compatible navigateur (${compatibleVariant.codecs}).`,
+          detectedFormat,
+          corsAllowed,
+          httpsCompatible,
+          segmentChecked: false,
+          checkedAt,
+        };
+      }
+
+      const variantUrl = assertSafeHttpUrl(new URL(compatibleVariant.uri, currentBaseUrl).toString());
       if (variantUrl.protocol !== 'https:') {
         return {
           status: 'incompatible',
@@ -798,12 +859,12 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
         method: 'GET',
         headers: {
           Origin: originHeader,
-          'User-Agent': 'CharitasTV-HealthMonitor/2.0',
+          'User-Agent': 'CharitasTV-HealthMonitor/2.1',
         },
         redirect: 'follow',
         signal: AbortSignal.timeout(6500),
       });
-      corsAllowed = corsAllowed || hasPermissiveCors(variantRes.headers, originHeader);
+      corsAllowed = corsAllowed && hasPermissiveCors(variantRes.headers, originHeader);
       if (!variantRes.ok) {
         await variantRes.body?.cancel().catch(() => {});
         return {
@@ -817,9 +878,9 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
           checkedAt,
         };
       }
-      currentManifestText = await readBoundedBodyText(variantRes, 65536);
+      const variantText = await readBoundedBodyText(variantRes, 65536);
       currentBaseUrl = variantRes.url || variantUrl.toString();
-      if (!currentManifestText.includes('#EXTM3U')) {
+      if (!variantText.includes('#EXTM3U')) {
         return {
           status: 'unavailable',
           httpStatus: variantRes.status,
@@ -831,8 +892,9 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
           checkedAt,
         };
       }
-      ref = extractFirstHlsReference(currentManifestText);
-      if (!ref) {
+      const parsedChild = extractAllHlsPlaylistReferences(variantText);
+      activeSegments = parsedChild.segments;
+      if (activeSegments.length === 0) {
         return {
           status: 'unavailable',
           httpStatus: variantRes.status,
@@ -846,8 +908,38 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
       }
     }
 
-    // Verify first actual media segment (.ts / .m4s / .aac) reachability and CORS
-    const segUrl = assertSafeHttpUrl(new URL(ref.uri, currentBaseUrl).toString());
+    // Check alternate demuxed audio track if declared in Master manifest
+    if (parsedMaster.audioUris.length > 0) {
+      const audioUrl = assertSafeHttpUrl(new URL(parsedMaster.audioUris[0], response.url || safeUrl.toString()).toString());
+      await assertSafeResolvedTarget(audioUrl);
+      const audioRes = await fetch(audioUrl.toString(), {
+        method: 'GET',
+        headers: {
+          Origin: originHeader,
+          'User-Agent': 'CharitasTV-HealthMonitor/2.1',
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(5000),
+      });
+      corsAllowed = corsAllowed && hasPermissiveCors(audioRes.headers, originHeader);
+      await audioRes.body?.cancel().catch(() => {});
+      if (!audioRes.ok) {
+        return {
+          status: 'unavailable',
+          httpStatus: audioRes.status,
+          error: `Piste audio HLS inaccessible (HTTP ${audioRes.status}).`,
+          detectedFormat,
+          corsAllowed,
+          httpsCompatible,
+          segmentChecked: false,
+          checkedAt,
+        };
+      }
+    }
+
+    // Probe the LATEST live-edge segment with GET Range (avoids false 404 when oldest sliding-window segment expires)
+    const latestSegRef = activeSegments[activeSegments.length - 1];
+    const segUrl = assertSafeHttpUrl(new URL(latestSegRef, currentBaseUrl).toString());
     if (segUrl.protocol !== 'https:') {
       return {
         status: 'incompatible',
@@ -863,29 +955,29 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
     await assertSafeResolvedTarget(segUrl);
 
     let segRes = await fetch(segUrl.toString(), {
-      method: 'HEAD',
+      method: 'GET',
       headers: {
         Origin: originHeader,
-        'User-Agent': 'CharitasTV-HealthMonitor/2.0',
+        Range: 'bytes=0-1023',
+        'User-Agent': 'CharitasTV-HealthMonitor/2.1',
       },
       redirect: 'follow',
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(6500),
     });
     if (segRes.status === 405 || segRes.status === 501) {
       await segRes.body?.cancel().catch(() => {});
       segRes = await fetch(segUrl.toString(), {
-        method: 'GET',
+        method: 'HEAD',
         headers: {
           Origin: originHeader,
-          Range: 'bytes=0-1023',
-          'User-Agent': 'CharitasTV-HealthMonitor/2.0',
+          'User-Agent': 'CharitasTV-HealthMonitor/2.1',
         },
         redirect: 'follow',
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(6500),
       });
     }
     const segCors = hasPermissiveCors(segRes.headers, originHeader);
-    corsAllowed = corsAllowed && segCors ? true : corsAllowed || segCors;
+    corsAllowed = corsAllowed && segCors;
     const segOk = segRes.ok;
     const segStatus = segRes.status;
     await segRes.body?.cancel().catch(() => {});
@@ -908,7 +1000,7 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
         status: 'incompatible',
         httpStatus: response.status,
         error:
-          'En-tête CORS (Access-Control-Allow-Origin) absent sur le flux : illisible par le lecteur web HLS.js.',
+          'En-tête CORS (Access-Control-Allow-Origin) absent sur le flux ou ses segments : illisible par le lecteur web HLS.js.',
         detectedFormat,
         corsAllowed: false,
         httpsCompatible,
@@ -963,21 +1055,32 @@ export async function runChurchChannelsHealthCheck(churchId: number, userId?: nu
   );
 
   const results: { channelId: number; status: string; error: string | null }[] = [];
-  for (const ch of rows) {
-    const probe = await probeStreamUrl(ch.streamUrl);
-    await withTenantContext({ churchId, userId: userId ?? null, isSuperAdmin: true }, async (tx) =>
-      tx
-        .update(tvChannels)
-        .set({
-          streamStatus: probe.status,
-          httpStatus: probe.httpStatus,
-          lastCheckError: probe.error,
-          lastCheckedAt: new Date(probe.checkedAt),
-          updatedAt: new Date(),
-        })
-        .where(eq(tvChannels.id, ch.id))
+  const chunkSize = 4;
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const slice = rows.slice(i, i + chunkSize);
+    const probed = await Promise.all(
+      slice.map(async (ch) => ({
+        channel: ch,
+        probe: await probeStreamUrl(ch.streamUrl),
+      }))
     );
-    results.push({ channelId: ch.id, status: probe.status, error: probe.error });
+
+    await withTenantContext({ churchId, userId: userId ?? null, isSuperAdmin: true }, async (tx) => {
+      for (const { channel, probe } of probed) {
+        await tx
+          .update(tvChannels)
+          .set({
+            streamStatus: probe.status,
+            httpStatus: probe.httpStatus,
+            lastCheckError: probe.error,
+            lastCheckedAt: new Date(probe.checkedAt),
+            streamFormat: probe.detectedFormat,
+            updatedAt: new Date(),
+          })
+          .where(eq(tvChannels.id, channel.id));
+        results.push({ channelId: channel.id, status: probe.status, error: probe.error });
+      }
+    });
   }
   return results;
 }
