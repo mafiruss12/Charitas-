@@ -1,0 +1,11 @@
+{
+  "packageName": "ci.ebimpe.charitas",
+  "versionCode": 1,
+  "versionName": "1.0.0",
+  "minSupportedVersionCode": 1,
+  "forceUpdate": false,
+  "releaseNotes": "Version initiale Charitas — Église Saint Louis Roi d'Ebimpé.",
+  "apkUrl": "https://github.com/mafiruss12/Charitas-/releases/latest/download/charitas-ebimpe-debug.apk",
+  "pageUrl": "https://github.com/mafiruss12/Charitas-/releases/latest",
+  "publishedAt": "2026-11-13"
+}
