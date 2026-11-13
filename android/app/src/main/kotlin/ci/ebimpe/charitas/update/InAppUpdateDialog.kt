@@ -9,7 +9,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
@@ -24,24 +23,24 @@ fun InAppUpdateDialog(
         onDismissRequest = { if (!info.forceUpdate) onDismiss() },
         title = {
             Text(
-                if (info.forceUpdate) "Mise à jour obligatoire"
+                if (info.forceUpdate) "Mise a jour obligatoire"
                 else "Nouvelle version disponible"
             )
         },
         text = {
             Column {
                 Text(
-                    "Charitas ${info.versionName} (code ${info.versionCode}) est disponible.\n" +
-                        "Version installée : ${InAppUpdateChecker.currentVersionName()} " +
-                        "(${InAppUpdateChecker.currentVersionCode()})."
+                    "Charitas " + info.versionName + " (code " + info.versionCode + ") est disponible. " +
+                        "Version installee : " + InAppUpdateChecker.currentVersionName() +
+                        " (" + InAppUpdateChecker.currentVersionCode().toString() + ")."
                 )
                 if (info.releaseNotes.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(androidx.compose.ui.modifier.Modifier.height(8.dp))
                     Text(info.releaseNotes, style = MaterialTheme.typography.bodyMedium)
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(androidx.compose.ui.modifier.Modifier.height(8.dp))
                 Text(
-                    "Téléchargement via GitHub Releases. Autorisez l'installation depuis cette source si Android le demande.",
+                    "Telechargement via GitHub Releases.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -53,7 +52,7 @@ fun InAppUpdateDialog(
                 }
                 onUpdate()
             }) {
-                Text("Mettre à jour")
+                Text("Mettre a jour")
             }
         },
         dismissButton = {
