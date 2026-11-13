@@ -1,10 +1,10 @@
 {
   "packageName": "ci.ebimpe.charitas",
-  "versionCode": 1,
-  "versionName": "1.0.0",
+  "versionCode": 2,
+  "versionName": "1.0.1",
   "minSupportedVersionCode": 1,
   "forceUpdate": false,
-  "releaseNotes": "Charitas Android — téléchargement via GitHub Releases.",
+  "releaseNotes": "Correction CHARITAS TV : catalogue de chaînes même si l API serveur est indisponible (secours M3U), messages d erreur clairs, moins de faux hors-ligne.",
   "apkUrl": "https://github.com/mafiruss12/Charitas-/releases/latest/download/charitas-ebimpe-debug.apk",
   "pageUrl": "https://github.com/mafiruss12/Charitas-/releases/latest",
   "publishedAt": "2026-11-13"
