@@ -1,4 +1,7 @@
-package ci.ebimpe.charitas.update
+package ci.ebimpe.charitas.ui.components
+
+import ci.ebimpe.charitas.update.AppVersionInfo
+import ci.ebimpe.charitas.update.InAppUpdateChecker
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
