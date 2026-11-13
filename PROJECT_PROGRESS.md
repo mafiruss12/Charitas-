@@ -57,3 +57,27 @@ Dernière mise à jour : 2026-11-12
 
 
 <!-- checkpoint agent 2026-11-13 -->
+
+
+---
+
+## MISSION RESTANTE — CI GitHub Actions & APK (2026-11-13)
+
+### Fait cote produit (deja valide)
+- Backend tests 28/28
+- Routes publiques HTTP 200
+- Web TypeScript + Vite build OK
+- Android : 37 fichiers Kotlin, Bible 73 livres / 35 610 versets
+
+### Bloqueurs CI identifies
+1. **CI Node** : `npm ci` echoue sans `package-lock.json` (depot en `bun.lock`).
+2. **CI Android** : echec a `gradle testDebugUnitTest` faute de **Android SDK / platform 35** dans le runner.
+
+### Correctifs prepares
+Voir `ops/github-workflows/` et `ops/README_FIX_CI.md`.
+Les workflows corriges ne peuvent pas etre ecrits automatiquement dans `.github/workflows/` sans scope GitHub **`workflow`** sur le token.
+
+### Action requise
+1. Copier les YAML depuis `ops/github-workflows/` vers `.github/workflows/` **ou** fournir un PAT avec scope `workflow`.
+2. Relancer *Android CI* (workflow_dispatch).
+3. Telecharger l'artifact `charitas-ebimpe-debug-apk`.
