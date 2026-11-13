@@ -40,6 +40,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import ci.ebimpe.charitas.CharitasAppContainer
+import ci.ebimpe.charitas.BuildConfig
+import ci.ebimpe.charitas.update.InAppUpdateChecker
+import ci.ebimpe.charitas.update.UpdateCheckResult
+import ci.ebimpe.charitas.update.AppVersionInfo
+import ci.ebimpe.charitas.ui.components.InAppUpdateDialog
 import ci.ebimpe.charitas.core.model.CharitasRoles
 import ci.ebimpe.charitas.core.security.AppPreferencesState
 import ci.ebimpe.charitas.core.security.AppThemeMode
@@ -68,6 +73,8 @@ fun SettingsAuthProfileScreen(
     var phone by remember { mutableStateOf("") }
     var invitationCode by remember { mutableStateOf("") }
     var feedback by remember { mutableStateOf<String?>(null) }
+    var updateInfo by remember { mutableStateOf<AppVersionInfo?>(null) }
+    var checkingUpdate by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
 
     var showForgotDialog by remember { mutableStateOf(false) }
@@ -281,9 +288,54 @@ fun SettingsAuthProfileScreen(
             }
         }
 
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Application", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Version installée : ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                    Button(
+                        enabled = !checkingUpdate,
+                        onClick = {
+                            checkingUpdate = true
+                            scope.launch {
+                                when (val r = InAppUpdateChecker.check()) {
+                                    is UpdateCheckResult.Available -> {
+                                        updateInfo = r.info
+                                        feedback = null
+                                    }
+                                    is UpdateCheckResult.UpToDate ->
+                                        feedback = "Vous avez déjà la dernière version (${BuildConfig.VERSION_NAME})."
+                                    is UpdateCheckResult.Error ->
+                                        feedback = r.message
+                                }
+                                checkingUpdate = false
+                            }
+                        }
+                    ) {
+                        Text(if (checkingUpdate) "Vérification…" else "Vérifier les mises à jour")
+                    }
+                }
+            }
+        }
+
         feedback?.let { msg ->
             item { Text(msg, color = MaterialTheme.colorScheme.primary) }
         }
+    }
+
+    updateInfo?.let { info ->
+        val ctx = LocalContext.current
+        InAppUpdateDialog(
+            info = info,
+            onDismiss = { updateInfo = null },
+            onUpdate = {
+                if (InAppUpdateChecker.enqueueApkDownload(ctx, info) == null) {
+                    InAppUpdateChecker.openPageOrApk(ctx, info)
+                }
+                if (!info.forceUpdate) updateInfo = null
+            }
+        )
     }
 
     if (showForgotDialog) {
