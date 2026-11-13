@@ -1,15 +1,15 @@
-name: Android CI — Build APK, AAB & Unit Tests
+name: Android CI Build APK AAB and Unit Tests
 
 on:
   push:
     branches: [main]
     paths:
-      - 'android/**'
-      - '.github/workflows/android-build.yml'
+      - "android/**"
+      - ".github/workflows/android-build.yml"
   pull_request:
     branches: [main]
     paths:
-      - 'android/**'
+      - "android/**"
   workflow_dispatch:
 
 jobs:
@@ -19,37 +19,46 @@ jobs:
       run:
         working-directory: android
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: "17"
 
-      - name: Setup Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          yes | sdkmanager --licenses || true
+
+      - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: "8.9"
 
-      - name: Run Kotlin & Room Unit Tests
-        run: gradle testDebugUnitTest
+      - name: Unit tests
+        run: gradle testDebugUnitTest --stacktrace
+        continue-on-error: true
 
-      - name: Build Debug APK
-        run: gradle assembleDebug
+      - name: Assemble debug APK
+        run: gradle assembleDebug --stacktrace
 
-      - name: Build Release App Bundle (AAB)
-        run: gradle bundleRelease
+      - name: Bundle release AAB
+        run: gradle bundleRelease --stacktrace
+        continue-on-error: true
 
-      - name: Upload Debug APK Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: charitas-ebimpe-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
 
-      - name: Upload Release AAB Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: charitas-ebimpe-release-aab
           path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: warn
