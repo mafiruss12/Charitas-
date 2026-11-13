@@ -16,6 +16,20 @@ Audit complet de la plateforme existante **CHARITAS** et plan d’architecture e
 
 ---
 
+## 0. Dernières Mises à Jour & Livraisons Récentes (Novembre 2026)
+
+- [x] **Audit des flux TV & Résolution CORS / Mixed Content** : Ajout et déploiement du proxy serveur HLS `/api/public/tv/stream-proxy?url=...` réécrivant les sous-manifestes et segments TS avec en-têtes CORS permissifs. Les chaînes TV fonctionnent désormais sans blocage sur `https://charitas.ai.studio`.
+- [x] **Mode TikTok / Reels Vidéo 9:16** :
+  - **Web** : Intégration dans `PublicCommunityExplorer.tsx` d'un lecteur immersif vertical 9:16 avec boutons d'action flottants (❤️ Amen, 💬 Commentaires, ↗️ Partage), badges et navigation clavier/défilement.
+  - **Android** : Intégration dans `SocialScreen.kt` du mode dédié **Reels TikTok (9:16)** avec ExoPlayer vertical (`aspectRatio = 9f / 16f`, auto-looping), boutons d'action verticaux, carrousel de capsules et capsules paroissiales de secours.
+- [x] **Harmonisation Visuelle Totale Web & Mobile Android** :
+  - Transfert de l'ensemble des 10 photographies haute définition de la paroisse d'Ebimpé dans `android/app/src/main/assets/images/`.
+  - Refonte complète de `HomeScreen.kt` (Hero avec dégradé Bleu Profond `#04112B` -> `#0A2B6E` -> `#1750B5`, blason officiel, sous-titres, 5 cartes piliers interactives, section « Notre mission » avec check-list et photographie de communauté).
+  - Harmonisation de `SocialScreen.kt`, `TvScreen.kt`, `EventsSolidarityScreen.kt`, `BibleScreen.kt` et `CharitasNavHost.kt`.
+- [x] **Synchronisation GitHub Complète** : Tout le code source (Web, API Node.js, Android Kotlin Compose, assets photographiques) a été validé et poussé sur la branche `main` du dépôt GitHub `https://github.com/mafiruss12/Charitas-`.
+
+---
+
 ## 1. Rapport d’Audit du Projet CHARITAS Existant
 
 ### 1.1 Constat Environnement, Dépôt & Infrastructure
