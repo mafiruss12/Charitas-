@@ -58,6 +58,68 @@ function cleanOptionalText(raw: unknown, maxLen = 500): string | null {
 const publicRefreshCooldownByChurch = new Map<number, number>();
 const publicSingleProbeCooldown = new Map<number, number>();
 
+/** Catalogue public de secours : uniquement la catégorie Religious d'iptv-org. */
+async function buildIptvOrgReligiousCatalog(options: {
+  churchId: number;
+  churchName: string;
+  categoryFilter?: string;
+  searchFilter?: string;
+  maxChannels?: number;
+}) {
+  const maxChannels = options.maxChannels ?? 200;
+  const entries = await fetchAndParseM3uUrl(IPTV_ORG_RELIGIOUS_PLAYLIST_URL);
+  // Playlist déjà filtrée "religious" ; on garde isLikelyChristian quand dispo
+  let channels = entries
+    .filter((e) => e.isLikelyChristian !== false)
+    .slice(0, maxChannels)
+    .map((e, index) => ({
+      id: -(index + 1),
+      churchId: options.churchId,
+      name: e.name,
+      category: normalizeTvCategory(e.suggestedCategory || 'TV chrétiennes internationales'),
+      language: e.language || '—',
+      country: e.country,
+      logoUrl: e.logoUrl,
+      streamUrl: e.streamUrl,
+      streamFormat: e.streamFormat || 'hls',
+      description: 'Source : iptv-org (Religious) — github.com/iptv-org/iptv',
+      currentProgram: null as string | null,
+      isRecommended: (e.christianRelevanceScore || 0) >= 2,
+      isValidated: true,
+      isActive: true,
+      streamStatus: 'operational' as const,
+      lastCheckError: null as string | null,
+    }));
+
+  const cat = options.categoryFilter?.trim();
+  if (cat && cat !== 'all') {
+    const norm = normalizeTvCategory(cat);
+    channels = channels.filter(
+      (c) => normalizeTvCategory(c.category) === norm || c.name.toLowerCase().includes(cat.toLowerCase())
+    );
+  }
+  const q = options.searchFilter?.trim().toLowerCase();
+  if (q) {
+    channels = channels.filter((c) =>
+      `${c.name} ${c.category} ${c.country || ''} ${c.language}`.toLowerCase().includes(q)
+    );
+  }
+
+  const recommendedChannels = channels.filter((c) => c.isRecommended).slice(0, 12);
+  return {
+    churchId: options.churchId,
+    churchName: options.churchName,
+    categories: [...new Set(channels.map((c) => c.category))],
+    verifiedAt: new Date().toISOString(),
+    channels,
+    recommendedChannels: recommendedChannels.length ? recommendedChannels : channels.slice(0, 8),
+    broadcasts: [] as unknown[],
+    source: 'iptv-org-religious',
+  };
+}
+
+
+
 tvRouter.get('/public/tv/catalog', async (req, res) => {
   try {
     await ensureStarterChurches();
@@ -79,14 +141,25 @@ tvRouter.get('/public/tv/catalog', async (req, res) => {
       publicChurches[0];
 
     if (!targetChurch) {
-      return res.json({
-        churchId: 0,
-        churchName: 'CHARITAS — Église Saint Louis Roi d’Ebimpé',
-        categories: [...TV_CATEGORIES],
-        channels: [],
-        recommendedChannels: [],
-        broadcasts: [],
-      });
+      try {
+        const iptvCatalog = await buildIptvOrgReligiousCatalog({
+          churchId: 0,
+          churchName: 'CHARITAS — Église Saint Louis Roi d’Ebimpé',
+          categoryFilter,
+          searchFilter,
+        });
+        return res.json(iptvCatalog);
+      } catch (iptvErr) {
+        console.error('iptv-org religious (no church) failed:', iptvErr);
+        return res.json({
+          churchId: 0,
+          churchName: 'CHARITAS — Église Saint Louis Roi d’Ebimpé',
+          categories: [...TV_CATEGORIES],
+          channels: [],
+          recommendedChannels: [],
+          broadcasts: [],
+        });
+      }
     }
 
     if (forceRefresh) {
@@ -155,6 +228,21 @@ tvRouter.get('/public/tv/catalog', async (req, res) => {
         };
       }
     );
+
+    const hasChannels = Array.isArray(data.channels) && data.channels.length > 0;
+    if (!hasChannels) {
+      try {
+        const iptvCatalog = await buildIptvOrgReligiousCatalog({
+          churchId: targetChurch.id,
+          churchName: targetChurch.name,
+          categoryFilter,
+          searchFilter,
+        });
+        return res.json(iptvCatalog);
+      } catch (iptvErr) {
+        console.error('iptv-org religious fallback failed:', iptvErr);
+      }
+    }
 
     return res.json({
       churchId: targetChurch.id,
