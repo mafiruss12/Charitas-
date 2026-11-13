@@ -1,9 +1,12 @@
 package ci.ebimpe.charitas.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.Forum
@@ -15,11 +18,23 @@ import androidx.compose.material.icons.rounded.VolunteerActivism
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import ci.ebimpe.charitas.R
+import ci.ebimpe.charitas.ui.theme.CharitasDeepNavy
+import ci.ebimpe.charitas.ui.theme.CharitasGold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -89,7 +104,38 @@ fun CharitasRootScaffold(container: CharitasAppContainer) {
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("CHARITAS · Saint Louis Roi") },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = CharitasDeepNavy,
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White
+                    ),
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_charitas_crest),
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "CHARITAS",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = "Saint Louis Roi d’Ebimpé",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = CharitasGold,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    },
                     actions = {
                         Row {
                             IconButton(onClick = { navigateSingleTop(CharitasRoute.Messaging.route) }) {
@@ -109,14 +155,24 @@ fun CharitasRootScaffold(container: CharitasAppContainer) {
             }
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = CharitasDeepNavy,
+                contentColor = Color.White
+            ) {
                 bottomTabs.forEach { tab ->
                     val selected = currentDestination?.hierarchy?.any { it.route == tab.route } == true
                     NavigationBarItem(
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
                         label = { Text(tab.label, maxLines = 1) },
                         selected = selected,
-                        onClick = { navigateSingleTop(tab.route) }
+                        onClick = { navigateSingleTop(tab.route) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = CharitasDeepNavy,
+                            selectedTextColor = CharitasGold,
+                            indicatorColor = CharitasGold,
+                            unselectedIconColor = Color.White.copy(alpha = 0.65f),
+                            unselectedTextColor = Color.White.copy(alpha = 0.65f)
+                        )
                     )
                 }
             }

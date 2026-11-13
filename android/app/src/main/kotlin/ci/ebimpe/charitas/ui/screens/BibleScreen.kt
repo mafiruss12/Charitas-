@@ -1,6 +1,8 @@
 package ci.ebimpe.charitas.ui.screens
 
 import android.content.Intent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +19,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import ci.ebimpe.charitas.R
+import ci.ebimpe.charitas.ui.theme.CharitasDeepNavy
+import ci.ebimpe.charitas.ui.theme.CharitasGold
+import ci.ebimpe.charitas.ui.theme.CharitasRoyalNavy
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
@@ -137,13 +148,60 @@ fun BibleScreen(container: CharitasAppContainer) {
     val bookmarkRefs = remember(bookmarks) { bookmarks.map { it.reference }.toSet() }
     val json = NetworkClientFactory.jsonSerializer
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedTab) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // Top Harmonized Parish Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(CharitasDeepNavy, CharitasRoyalNavy)
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_charitas_crest),
+                    contentDescription = "Logo CHARITAS",
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "LA SAINTE BIBLE (CRAMPON 1923)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "Canon catholique intégral (73 livres) · 100% hors ligne",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CharitasGold,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = CharitasDeepNavy,
+            contentColor = CharitasGold
+        ) {
             listOf("Lecture", "Recherche", "Favoris/Notes", "Plans", "Méditations").forEachIndexed { idx, label ->
                 Tab(
                     selected = selectedTab == idx,
                     onClick = { selectedTab = idx },
-                    text = { Text(label, maxLines = 1) }
+                    text = { Text(label, maxLines = 1, fontWeight = FontWeight.SemiBold) },
+                    selectedContentColor = CharitasGold,
+                    unselectedContentColor = Color.White.copy(alpha = 0.7f)
                 )
             }
         }

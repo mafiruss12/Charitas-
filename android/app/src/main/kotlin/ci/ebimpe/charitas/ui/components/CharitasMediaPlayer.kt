@@ -52,7 +52,10 @@ fun CharitasMediaPlayer(
     streamUrl: String?,
     title: String,
     isOnline: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    aspectRatio: Float = 16f / 9f,
+    showInfoFooter: Boolean = true,
+    autoLoop: Boolean = false
 ) {
     val context = LocalContext.current
     var isBuffering by remember { mutableStateOf(true) }
@@ -63,7 +66,7 @@ fun CharitasMediaPlayer(
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 9f)
+                .aspectRatio(aspectRatio)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color(0xFF0A1429))
                 .padding(16.dp),
@@ -91,7 +94,7 @@ fun CharitasMediaPlayer(
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 9f)
+                .aspectRatio(aspectRatio)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color(0xFF0A1429)),
             contentAlignment = Alignment.Center
@@ -105,9 +108,10 @@ fun CharitasMediaPlayer(
         return
     }
 
-    val exoPlayer = remember(streamUrl) {
+    val exoPlayer = remember(streamUrl, autoLoop) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(streamUrl))
+            repeatMode = if (autoLoop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
             playWhenReady = true
             prepare()
         }
@@ -135,7 +139,7 @@ fun CharitasMediaPlayer(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 9f)
+                .aspectRatio(aspectRatio)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color.Black)
         ) {
@@ -213,22 +217,24 @@ fun CharitasMediaPlayer(
                 )
             }
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = if (playbackError == null) "EN DIRECT / HLS" else "FLUX INDISPONIBLE",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
+        if (showInfoFooter) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = if (playbackError == null) "EN DIRECT / HLS" else "FLUX INDISPONIBLE",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
         }
     }
 }
