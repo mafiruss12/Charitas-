@@ -1,29 +1,25 @@
-name: CI — Build & Typecheck
+name: CI Build and Typecheck
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
-
+          node-version: "22"
       - name: Install dependencies
-        run: npm ci
-
+        run: npm install --no-fund --no-audit
       - name: TypeScript typecheck
         run: npm run lint
-
       - name: Production Vite build
         run: npm run build
+      - name: Backend unit tests
+        run: npx tsx --test tests/*.test.ts
