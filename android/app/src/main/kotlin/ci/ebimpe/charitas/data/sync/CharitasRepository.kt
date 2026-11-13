@@ -8,6 +8,7 @@ import ci.ebimpe.charitas.core.database.OfflineReadingPlanEntity
 import ci.ebimpe.charitas.core.database.OutboxOperationEntity
 import ci.ebimpe.charitas.core.model.*
 import ci.ebimpe.charitas.core.network.*
+import ci.ebimpe.charitas.data.tv.TvFallbackCatalog
 import ci.ebimpe.charitas.core.security.SessionVault
 import ci.ebimpe.charitas.notifications.CharitasNotificationHelper
 import kotlinx.coroutines.flow.Flow
@@ -235,8 +236,10 @@ class CharitasRepository(
         isPrivate: Boolean,
         crossinline fetcher: suspend () -> retrofit2.Response<T>
     ): RepoResult<T> {
+        var networkError: String? = null
         if (networkMonitor.refreshNow()) {
-            val attempt = runCatching { fetcher() }.getOrNull()
+            val attemptResult = runCatching { fetcher() }
+            val attempt = attemptResult.getOrNull()
             if (attempt != null && attempt.isSuccessful && attempt.body() != null) {
                 val payload = attempt.body()!!
                 cacheDao.putCachedJson(
@@ -248,6 +251,16 @@ class CharitasRepository(
                 )
                 return RepoResult.Success(payload, fromCache = false)
             }
+            networkError = when {
+                attemptResult.exceptionOrNull() != null ->
+                    attemptResult.exceptionOrNull()?.message ?: "Erreur réseau"
+                attempt == null -> "Réponse serveur vide"
+                !attempt.isSuccessful ->
+                    "Serveur ${attempt.code()}: ${NetworkClientFactory.parseErrorMessage(attempt)}"
+                else -> "Réponse invalide du serveur"
+            }
+        } else {
+            networkError = "Pas de connexion Internet"
         }
 
         val cached = cacheDao.getCachedJson(cacheKey)
@@ -258,7 +271,7 @@ class CharitasRepository(
             }
         }
 
-        return RepoResult.Error("Contenu indisponible hors connexion.")
+        return RepoResult.Error(networkError ?: "Contenu indisponible.")
     }
 
     suspend fun loadShowcase(churchId: Int? = null): RepoResult<PublicShowcaseResponseDto> =
@@ -296,32 +309,71 @@ class CharitasRepository(
     ): RepoResult<PublicTvCatalogResponseDto> {
         val normalizedSearch = search?.trim()?.ifBlank { null }
         val refreshParam = if (forceRefresh) 1 else null
-        if (normalizedSearch != null) {
-            if (!networkMonitor.refreshNow()) {
-                val cached = cacheDao.getCachedJson("public:tv:$churchId:${category ?: "all"}")
-                    ?.let { runCatching { json.decodeFromString<PublicTvCatalogResponseDto>(it.payloadJson) }.getOrNull() }
-                if (cached != null) {
-                    val q = normalizedSearch.lowercase()
-                    val filtered = cached.channels.filter {
-                        "${it.name} ${it.category} ${it.language} ${it.country ?: ""} ${it.currentProgram ?: ""}".lowercase().contains(q)
-                    }
-                    return RepoResult.Success(cached.copy(channels = filtered), fromCache = true)
-                }
-                return RepoResult.Error("Contenu indisponible hors connexion.")
+        val cacheKey = "public:tv:$churchId:${category ?: "all"}"
+
+        // 1) API CHARITAS
+        if (networkMonitor.refreshNow()) {
+            val apiResult = runCatching {
+                api.getPublicTvCatalog(
+                    churchId = churchId.takeIf { it > 0 },
+                    category = category,
+                    search = normalizedSearch,
+                    refresh = refreshParam
+                )
             }
-            return try {
-                val res = api.getPublicTvCatalog(churchId, category = category, search = normalizedSearch, refresh = refreshParam)
-                if (res.isSuccessful && res.body() != null) {
-                    RepoResult.Success(res.body()!!, fromCache = false)
-                } else {
-                    RepoResult.Error(NetworkClientFactory.parseErrorMessage(res))
-                }
-            } catch (e: Exception) {
-                RepoResult.Error(e.message ?: "Erreur réseau CHARITAS TV.")
+            val res = apiResult.getOrNull()
+            val body = res?.body()
+            if (res != null && res.isSuccessful && body != null && body.channels.isNotEmpty()) {
+                cacheDao.putCachedJson(
+                    CachedJsonPayloadEntity(
+                        cacheKey = cacheKey,
+                        isPrivateUserScope = false,
+                        payloadJson = json.encodeToString(body)
+                    )
+                )
+                return RepoResult.Success(body, fromCache = false)
             }
         }
-        return fetchWithOfflineCache("public:tv:$churchId:${category ?: "all"}", isPrivate = false) {
-            api.getPublicTvCatalog(churchId, category = category, search = null, refresh = refreshParam)
+
+        // 2) Cache local
+        val cached = cacheDao.getCachedJson(cacheKey)
+            ?.let { runCatching { json.decodeFromString<PublicTvCatalogResponseDto>(it.payloadJson) }.getOrNull() }
+        if (cached != null && cached.channels.isNotEmpty()) {
+            val filtered = if (normalizedSearch != null) {
+                val q = normalizedSearch.lowercase()
+                cached.copy(channels = cached.channels.filter {
+                    "${it.name} ${it.category} ${it.language} ${it.country ?: ""}".lowercase().contains(q)
+                })
+            } else cached
+            return RepoResult.Success(filtered, fromCache = true)
+        }
+
+        // 3) Secours : playlist religieuse publique (iptv-org) — lecture live même si API 404
+        return try {
+            val fallback = TvFallbackCatalog.load(
+                churchId = churchId,
+                category = category,
+                search = normalizedSearch
+            )
+            if (fallback.channels.isEmpty()) {
+                RepoResult.Error(
+                    "Aucune chaîne TV disponible. Vérifiez la connexion ou réessayez plus tard."
+                )
+            } else {
+                cacheDao.putCachedJson(
+                    CachedJsonPayloadEntity(
+                        cacheKey = cacheKey,
+                        isPrivateUserScope = false,
+                        payloadJson = json.encodeToString(fallback)
+                    )
+                )
+                RepoResult.Success(fallback, fromCache = false)
+            }
+        } catch (e: Exception) {
+            RepoResult.Error(
+                e.message?.takeIf { it.isNotBlank() }
+                    ?: "Impossible de charger le catalogue TV (API et secours M3U en échec)."
+            )
         }
     }
 
