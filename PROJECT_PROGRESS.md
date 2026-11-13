@@ -54,3 +54,6 @@ Dernière mise à jour : 2026-11-12
 ### Identifiants externes requis pour mise en production commerciale
 - Clés API marchandes Côte d'Ivoire (`ORANGE_MONEY_MERCHANT_KEY`, `MTN_MOMO_SUBSCRIPTION_KEY`, `MOOV_MONEY_API_KEY`, `WAVE_API_KEY`, `STRIPE_SECRET_KEY`) + `PAYMENT_WEBHOOK_SECRET` (sinon mode Sandbox explicite sans confirmation factice).
 - `SMTP_HOST` (envoi réel d'emails transactionnels).
+
+
+<!-- checkpoint agent 2026-11-13 -->
