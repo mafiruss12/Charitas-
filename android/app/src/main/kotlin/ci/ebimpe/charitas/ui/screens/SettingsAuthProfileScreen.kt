@@ -44,7 +44,7 @@ import ci.ebimpe.charitas.BuildConfig
 import ci.ebimpe.charitas.update.InAppUpdateChecker
 import ci.ebimpe.charitas.update.UpdateCheckResult
 import ci.ebimpe.charitas.update.AppVersionInfo
-import ci.ebimpe.charitas.ui.components.InAppUpdateDialog
+import ci.ebimpe.charitas.update.InAppUpdateDialog
 import ci.ebimpe.charitas.core.model.CharitasRoles
 import ci.ebimpe.charitas.core.security.AppPreferencesState
 import ci.ebimpe.charitas.core.security.AppThemeMode
