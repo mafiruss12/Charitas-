@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.modifier.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
@@ -35,10 +36,10 @@ fun InAppUpdateDialog(
                         " (" + InAppUpdateChecker.currentVersionCode().toString() + ")."
                 )
                 if (info.releaseNotes.isNotBlank()) {
-                    Spacer(androidx.compose.ui.modifier.Modifier.height(8.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(info.releaseNotes, style = MaterialTheme.typography.bodyMedium)
                 }
-                Spacer(androidx.compose.ui.modifier.Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     "Telechargement via GitHub Releases.",
                     style = MaterialTheme.typography.bodySmall
