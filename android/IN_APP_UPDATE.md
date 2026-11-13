@@ -30,3 +30,16 @@ Si `forceUpdate: true` **ou** si `versionCode` installé `< minSupportedVersionC
 ## Play Store (option futur)
 
 Quand l'app sera sur le Play Store, on pourra ajouter l'API officielle *Play In-App Updates* en parallèle de ce mécanisme (sideload / église).
+
+
+## GitHub Releases (actif)
+
+Le workflow **Android CI** publie automatiquement une Release sur `main` avec l'asset :
+
+`charitas-ebimpe-debug.apk`
+
+URL stable pour l'app :
+
+https://github.com/mafiruss12/Charitas-/releases/latest/download/charitas-ebimpe-debug.apk
+
+Après chaque build réussi sur `main`, une nouvelle tag `v{versionName}-{run_number}` est créée.
