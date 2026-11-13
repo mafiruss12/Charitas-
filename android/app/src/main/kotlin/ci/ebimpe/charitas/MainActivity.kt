@@ -17,9 +17,7 @@ import ci.ebimpe.charitas.ui.theme.CharitasTheme
 import ci.ebimpe.charitas.update.InAppUpdateChecker
 import ci.ebimpe.charitas.update.UpdateCheckResult
 import ci.ebimpe.charitas.update.AppVersionInfo
-import ci.ebimpe.charitas.ui.components.InAppUpdateDialog
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import ci.ebimpe.charitas.update.InAppUpdateDialog
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
