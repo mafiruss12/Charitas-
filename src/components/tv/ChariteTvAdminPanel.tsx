@@ -24,6 +24,7 @@ import {
   TV_BROADCAST_TYPES,
   TV_CATEGORIES,
   TV_STREAM_STATUS_META,
+  normalizeTvCategory,
 } from '../../lib/tvConstants';
 import type {
   TvBroadcastItem,
@@ -56,7 +57,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
   const [editingChannelId, setEditingChannelId] = useState<number | null>(null);
   const [chName, setChName] = useState('');
   const [chStreamUrl, setChStreamUrl] = useState('');
-  const [chCategory, setChCategory] = useState<string>(TV_CATEGORIES[2]);
+  const [chCategory, setChCategory] = useState<string>(TV_CATEGORIES[1]);
   const [chLanguage, setChLanguage] = useState('Français');
   const [chCountry, setChCountry] = useState("Côte d'Ivoire");
   const [chLogoUrl, setChLogoUrl] = useState('');
@@ -120,7 +121,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
     setEditingChannelId(null);
     setChName('');
     setChStreamUrl('');
-    setChCategory(TV_CATEGORIES[2]);
+    setChCategory(TV_CATEGORIES[1]);
     setChLanguage('Français');
     setChCountry("Côte d'Ivoire");
     setChLogoUrl('');
@@ -138,7 +139,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
     setEditingChannelId(ch.id);
     setChName(ch.name);
     setChStreamUrl(ch.streamUrl);
-    setChCategory(ch.category);
+    setChCategory(normalizeTvCategory(ch.category));
     setChLanguage(ch.language);
     setChCountry(ch.country || '');
     setChLogoUrl(ch.logoUrl || '');
@@ -215,10 +216,13 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
         method: 'POST',
       });
       setChannels((prev) => prev.map((c) => (c.id === channelId ? res.channel : c)));
+      const label =
+        TV_STREAM_STATUS_META[res.probe.status as keyof typeof TV_STREAM_STATUS_META]?.label ||
+        res.probe.status.toUpperCase();
       setSuccessMsg(
         res.probe.status === 'operational'
-          ? `Flux « ${res.channel.name} » vérifié : OPÉRATIONNEL.`
-          : `Flux « ${res.channel.name} » marqué INDISPONIBLE : ${res.probe.error || 'Échec de connexion'}`
+          ? `Flux « ${res.channel.name} » vérifié (manifest + CORS + segment) : ${label}.`
+          : `Flux « ${res.channel.name} » marqué ${label} : ${res.probe.error || 'Échec de connexion'}`
       );
       onChanged?.();
     } catch (err: unknown) {
@@ -228,6 +232,31 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
     }
   };
 
+  const handlePlaybackReport = useCallback(
+    async (channel: TvChannelItem, status: 'operational' | 'incompatible' | 'unavailable', detail?: string) => {
+      try {
+        const res = await apiFetch<{ channel: TvChannelItem }>(
+          `/api/churches/${churchId}/tv/admin/channels/${channel.id}/playback-report`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ status, error: detail }),
+          }
+        );
+        setChannels((prev) => prev.map((c) => (c.id === channel.id ? res.channel : c)));
+        setPreviewChannel((prev) => (prev?.id === channel.id ? res.channel : prev));
+        if (status === 'operational') {
+          setSuccessMsg(`Lecture navigateur confirmée pour « ${channel.name} » : OPÉRATIONNEL.`);
+        } else {
+          setError(`Diagnostic lecteur pour « ${channel.name} » (${status}) : ${detail || 'Échec de lecture.'}`);
+        }
+        onChanged?.();
+      } catch {
+        // Silent background report fallback
+      }
+    },
+    [churchId, onChanged]
+  );
+
   const handleCheckAllStreams = async () => {
     setBusyAction('check-all');
     setError(null);
@@ -236,10 +265,11 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
       const res = await apiFetch<{
         checkedCount: number;
         operationalCount: number;
+        incompatibleCount?: number;
         unavailableCount: number;
       }>(`/api/churches/${churchId}/tv/admin/check-all`, { method: 'POST' });
       setSuccessMsg(
-        `Vérification globale terminée (${res.checkedCount} chaînes) : ${res.operationalCount} opérationnelle(s), ${res.unavailableCount} indisponible(s).`
+        `Vérification globale terminée (${res.checkedCount} chaînes) : ${res.operationalCount} opérationnelle(s), ${res.incompatibleCount || 0} incompatible(s), ${res.unavailableCount} indisponible(s).`
       );
       await loadAdminData();
       onChanged?.();
@@ -353,7 +383,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
     try {
       const chosen = discovered
         .filter((e) => selectedIndexes.includes(e.index))
-        .slice(0, 10)
+        .slice(0, 25)
         .map((e) => ({
           name: e.name,
           streamUrl: e.streamUrl,
@@ -381,8 +411,9 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
       );
 
       const operationalCount = res.channels.filter((c) => c.streamStatus === 'operational').length;
+      const incompatibleCount = res.channels.filter((c) => c.streamStatus === 'incompatible').length;
       setSuccessMsg(
-        `${res.channels.length} chaîne(s) importée(s) et testée(s) : ${operationalCount} opérationnelle(s) publiée(s).`
+        `${res.channels.length} chaîne(s) importée(s) et testée(s) : ${operationalCount} opérationnelle(s), ${incompatibleCount} incompatible(s).`
       );
       setSelectedIndexes([]);
       await loadAdminData();
@@ -481,6 +512,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
     () => ({
       total: channels.length,
       operational: channels.filter((c) => c.streamStatus === 'operational').length,
+      incompatible: channels.filter((c) => c.streamStatus === 'incompatible').length,
       unavailable: channels.filter((c) => c.streamStatus === 'unavailable').length,
       published: channels.filter(
         (c) => c.isValidated && c.isActive && c.streamStatus === 'operational'
@@ -503,7 +535,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
             </h2>
             <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
               Sélection manuelle des flux chrétiens, contrôle des droits, vérification technique
-              HLS/M3U8 et pilotage des cultes en direct.
+              HLS/M3U8 (HTTPS, CORS &amp; segments vidéo) et test de lecture réel.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -535,7 +567,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 p-3.5">
             <p className="text-[11px] text-slate-500">Chaînes configurées</p>
             <p className="mt-1 text-2xl font-bold font-mono-tabular text-[#061A40] dark:text-white">
@@ -543,13 +575,19 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
             </p>
           </div>
           <div className="rounded-xl border border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-950/30 p-3.5">
-            <p className="text-[11px] text-emerald-700 dark:text-emerald-300">Flux opérationnels</p>
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-300">Opérationnelles</p>
             <p className="mt-1 text-2xl font-bold font-mono-tabular text-emerald-800 dark:text-emerald-300">
               {stats.operational}
             </p>
           </div>
+          <div className="rounded-xl border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/30 p-3.5">
+            <p className="text-[11px] text-amber-700 dark:text-amber-300">Incompatibles</p>
+            <p className="mt-1 text-2xl font-bold font-mono-tabular text-amber-800 dark:text-amber-300">
+              {stats.incompatible}
+            </p>
+          </div>
           <div className="rounded-xl border border-rose-200/80 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/30 p-3.5">
-            <p className="text-[11px] text-rose-700 dark:text-rose-300">Flux indisponibles</p>
+            <p className="text-[11px] text-rose-700 dark:text-rose-300">Indisponibles</p>
             <p className="mt-1 text-2xl font-bold font-mono-tabular text-rose-800 dark:text-rose-300">
               {stats.unavailable}
             </p>
@@ -618,10 +656,10 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
       )}
 
       {previewChannel && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">
-              Prévisualisation technique en direct : {previewChannel.name}
+        <div className="space-y-2 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-slate-50/70 dark:bg-slate-950/50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-[#061A40] dark:text-white">
+              Test réel dans le lecteur HLS : {previewChannel.name}
             </span>
             <button
               type="button"
@@ -633,12 +671,21 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
           </div>
           <HlsVideoPlayer
             source={{
+              id: previewChannel.id,
               title: previewChannel.name,
-              subtitle: `${previewChannel.category} · ${previewChannel.language}`,
+              subtitle: `${normalizeTvCategory(previewChannel.category)} · ${previewChannel.language}`,
               logoUrl: previewChannel.logoUrl,
               streamUrl: previewChannel.streamUrl,
               streamFormat: previewChannel.streamFormat,
               isLive: true,
+            }}
+            onPlaybackReady={() => {
+              if (previewChannel.streamStatus !== 'operational') {
+                void handlePlaybackReport(previewChannel, 'operational');
+              }
+            }}
+            onPlaybackFailed={(reason, kind) => {
+              void handlePlaybackReport(previewChannel, kind, reason);
             }}
           />
         </div>
@@ -851,13 +898,16 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
             <div className="space-y-3">
               {channels.map((ch) => {
                 const statusMeta =
-                  TV_STREAM_STATUS_META[ch.streamStatus] || TV_STREAM_STATUS_META.pending_check;
+                  TV_STREAM_STATUS_META[ch.streamStatus as keyof typeof TV_STREAM_STATUS_META] ||
+                  TV_STREAM_STATUS_META.pending_check;
                 const badgeClass =
                   ch.streamStatus === 'operational'
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
-                    : ch.streamStatus === 'unavailable'
-                      ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800'
-                      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800';
+                    : ch.streamStatus === 'incompatible'
+                      ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
+                      : ch.streamStatus === 'unavailable'
+                        ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
                 return (
                   <div
                     key={ch.id}
@@ -1106,7 +1156,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
                     {busyAction === 'import-selected' && (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     )}
-                    Importer sélection ({selectedIndexes.length}/10 max) &amp; Tester
+                    Importer sélection ({selectedIndexes.length}/25 max) &amp; Tester
                   </button>
                 </div>
               </div>
@@ -1124,7 +1174,7 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
                       <div className="flex items-center gap-3 min-w-0">
                         <input
                           type="checkbox"
-                          disabled={entry.alreadyAdded || (!checked && selectedIndexes.length >= 10)}
+                          disabled={entry.alreadyAdded || (!checked && selectedIndexes.length >= 25)}
                           checked={checked}
                           onChange={() => toggleSelectCandidate(entry.index)}
                         />
@@ -1138,14 +1188,15 @@ export const ChariteTvAdminPanel: React.FC<ChariteTvAdminPanelProps> = ({
                           <p className="text-[11px] text-slate-500 truncate">
                             {entry.suggestedCategory} · {entry.language}
                             {entry.country ? ` · ${entry.country}` : ''}
+                            {entry.httpProtocol === 'http' ? ' · HTTP (risque Mixed Content)' : ''}
                           </p>
                           <p className="text-[10px] font-mono text-slate-400 truncate max-w-xl">
                             {entry.streamUrl}
                           </p>
                         </div>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0 uppercase">
-                        {entry.streamFormat}
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0 uppercase">
+                        {entry.httpProtocol || 'https'} · {entry.streamFormat}
                       </span>
                     </label>
                   );

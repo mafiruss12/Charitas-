@@ -5,8 +5,8 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { createApp } from '../server.ts';
 import { db, pool, withTenantContext } from '../src/db/index.ts';
 import { churches, tvChannels, users } from '../src/db/schema.ts';
-import { assertSafeHttpUrl, parseM3uPlaylistText } from '../src/lib/iptv.ts';
-import { TV_CATEGORIES } from '../src/lib/tvConstants.ts';
+import { assertSafeHttpUrl, parseM3uPlaylistText, probeStreamUrl } from '../src/lib/iptv.ts';
+import { TV_CATEGORIES, normalizeTvCategory } from '../src/lib/tvConstants.ts';
 
 let server: http.Server;
 let baseUrl = '';
@@ -72,7 +72,7 @@ describe('Module CHARITAS TV & CHARITAS Live', () => {
   let channelValidatedId = 0;
   let channelBrokenId = 0;
 
-  it('valide la protection SSRF et le parsing texte strict M3U', () => {
+  it('valide la protection SSRF, le parsing #EXTINF avancé, l’exclusion non-chrétienne et la compatibilité HTTPS', async () => {
     assert.throws(() => assertSafeHttpUrl('http://127.0.0.1:3000/api/health'));
     assert.throws(() => assertSafeHttpUrl('http://localhost/stream.m3u8'));
     assert.throws(() => assertSafeHttpUrl('http://169.254.169.254/latest/meta-data/'));
@@ -80,22 +80,43 @@ describe('Module CHARITAS TV & CHARITAS Live', () => {
     assert.throws(() => assertSafeHttpUrl('javascript:alert(1)'));
     assert.doesNotThrow(() => assertSafeHttpUrl('https://cdn.example.org/live/playlist.m3u8'));
 
+    assert.equal(normalizeTvCategory('TV chrétiennes francophones'), 'Chaînes chrétiennes francophones');
+    assert.equal(normalizeTvCategory('TV chrétiennes africaines'), 'Chaînes chrétiennes africaines');
+    assert.equal(normalizeTvCategory('TV chrétiennes internationales'), 'Chaînes chrétiennes internationales');
+
     const sampleM3u = `#EXTM3U
-#EXTINF:-1 tvg-id="KTO.fr" tvg-logo="https://cdn.example.org/kto.png" tvg-language="French" group-title="Religious",<script>alert(1)</script>KTO TV Catholique
+#EXTINF:-1 tvg-id='KTO.fr' tvg-logo='https://cdn.example.org/kto.png' tvg-language='French' group-title='Religious, Faith',<script>alert(1)</script>KTO TV Catholique
 https://cdn.example.org/kto/playlist.m3u8
-#EXTINF:-1 tvg-id="LocalSSRF",Internal Loopback
+#EXTINF:-1 tvg-id='KTO.dup' group-title='Religious',KTO Doublon
+https://cdn.example.org/kto/playlist.m3u8
+#EXTINF:-1 tvg-id='Islamic.sa' group-title='Religious',Azan TV Makkah Live
+https://cdn.example.org/azan/index.m3u8
+#EXTINF:-1 tvg-id='LocalSSRF',Internal Loopback
 http://127.0.0.1/secret.m3u8
 #EXTINF:-1 tvg-language="English" group-title="Religious",Sports Channel
 https://cdn.example.org/sports/index.m3u8`;
 
     const entries = parseM3uPlaylistText(sampleM3u);
-    // Internal loopback entry must be dropped silently by SSRF filter
-    assert.equal(entries.length, 2);
+    // Internal loopback & duplicate URL are dropped; Azan TV (non-Christian) excluded from Christian flag
+    assert.equal(entries.length, 3);
     assert.ok(!entries[0].name.includes('<script>'));
     assert.equal(entries[0].isLikelyChristian, true);
-    assert.equal(entries[0].suggestedCategory, 'TV chrétiennes francophones');
-    assert.equal(entries[1].isLikelyChristian, false);
+    assert.equal(entries[0].suggestedCategory, 'Chaînes chrétiennes francophones');
+    assert.equal(entries[0].logoUrl, 'https://cdn.example.org/kto.png');
+
+    const azanEntry = entries.find((e) => e.name.includes('Azan TV'));
+    assert.ok(azanEntry);
+    assert.equal(azanEntry.isLikelyChristian, false);
+
+    const sportsEntry = entries.find((e) => e.name.includes('Sports Channel'));
+    assert.ok(sportsEntry);
+    assert.equal(sportsEntry.isLikelyChristian, false);
     assert.equal(TV_CATEGORIES.length, 8);
+
+    // HTTP stream must immediately report incompatible (Mixed Content)
+    const httpProbe = await probeStreamUrl('http://cdn.example.org/legacy/stream.m3u8');
+    assert.equal(httpProbe.status, 'incompatible');
+    assert.equal(httpProbe.httpsCompatible, false);
   });
 
   it('prépare deux églises et teste la découverte IPTV sans auto-publication', async () => {
@@ -193,7 +214,7 @@ https://stream.example.invalid/news.m3u8`,
       body: {
         name: 'SSRF Test',
         streamUrl: 'http://127.0.0.1:3000/api/health',
-        category: 'TV chrétiennes francophones',
+        category: 'Chaînes chrétiennes francophones',
       },
     });
     assert.equal(ssrfAdd.status, 400);
@@ -205,7 +226,7 @@ https://stream.example.invalid/news.m3u8`,
       body: {
         name: 'Chaîne Inaccessible Test',
         streamUrl: 'https://nonexistent.invalid/stream.m3u8',
-        category: 'TV chrétiennes africaines',
+        category: 'Chaînes chrétiennes africaines',
         rightsVerified: true,
         isValidated: true,
         testImmediately: true,
@@ -228,7 +249,7 @@ https://stream.example.invalid/news.m3u8`,
       body: {
         name: 'KTO Paroisse Sélection',
         streamUrl: 'https://cdn.example.org/kto/playlist.m3u8',
-        category: 'TV chrétiennes francophones',
+        category: 'Chaînes chrétiennes francophones',
         language: 'Français',
         country: "Côte d'Ivoire",
         currentProgram: 'Chapelet & Enseignement',
@@ -240,6 +261,19 @@ https://stream.example.invalid/news.m3u8`,
     });
     assert.equal(addValid.status, 201);
     channelValidatedId = (addValid.data.channel as { id: number }).id;
+
+    // Duplicate stream URL must be rejected with HTTP 409
+    const dupAdd = await api(`/api/churches/${churchAId}/tv/admin/channels`, {
+      method: 'POST',
+      token: tokenAdminA,
+      body: {
+        name: 'KTO Paroisse Doublon',
+        streamUrl: 'https://cdn.example.org/kto/playlist.m3u8',
+        category: 'Chaînes chrétiennes francophones',
+        testImmediately: false,
+      },
+    });
+    assert.equal(dupAdd.status, 409);
 
     // Cannot set isValidated=true without rightsVerified=true
     const unverifiedReject = await api(
@@ -282,6 +316,39 @@ https://stream.example.invalid/news.m3u8`,
     assert.equal(singleBroken.status, 404);
     const singleValid = await api(`/api/public/tv/channels/${channelValidatedId}`);
     assert.equal(singleValid.status, 200);
+
+    // Playback-report endpoint lets admin player update real status (incompatible -> operational)
+    const reportDenied = await api(
+      `/api/churches/${churchAId}/tv/admin/channels/${channelValidatedId}/playback-report`,
+      {
+        method: 'POST',
+        token: tokenMemberA,
+        body: { status: 'incompatible', error: 'CORS test' },
+      }
+    );
+    assert.equal(reportDenied.status, 403);
+
+    const reportIncomp = await api(
+      `/api/churches/${churchAId}/tv/admin/channels/${channelValidatedId}/playback-report`,
+      {
+        method: 'POST',
+        token: tokenAdminA,
+        body: { status: 'incompatible', error: 'Codec audio AC3 non supporté sur navigateur' },
+      }
+    );
+    assert.equal(reportIncomp.status, 200);
+    assert.equal((reportIncomp.data.channel as { streamStatus: string }).streamStatus, 'incompatible');
+
+    const reportOk = await api(
+      `/api/churches/${churchAId}/tv/admin/channels/${channelValidatedId}/playback-report`,
+      {
+        method: 'POST',
+        token: tokenAdminA,
+        body: { status: 'operational' },
+      }
+    );
+    assert.equal(reportOk.status, 200);
+    assert.equal((reportOk.data.channel as { streamStatus: string }).streamStatus, 'operational');
   });
 
   it('gère les favoris, l’historique avec reprise, CHARITAS Live et l’isolation RLS multi-tenant', async () => {

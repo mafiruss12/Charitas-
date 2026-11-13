@@ -739,7 +739,7 @@ export interface PublicEventsResponse {
   events: PublicEventDetail[];
 }
 
-export type TvStreamStatus = 'operational' | 'unavailable' | 'pending_check';
+export type TvStreamStatus = 'operational' | 'unavailable' | 'incompatible' | 'pending_check';
 
 export interface TvChannelItem {
   id: number;
@@ -803,6 +803,7 @@ export interface TvDiscoveryEntry {
   index: number;
   name: string;
   streamUrl: string;
+  httpProtocol?: 'https' | 'http';
   logoUrl: string | null;
   tvgId: string | null;
   groupTitle: string | null;

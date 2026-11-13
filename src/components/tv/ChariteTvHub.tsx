@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BookmarkCheck,
+  CheckCircle2,
   Clock,
   Film,
   Globe,
@@ -17,7 +18,12 @@ import {
   X,
 } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
-import { TV_BROADCAST_TYPES, TV_CATEGORIES } from '../../lib/tvConstants';
+import {
+  TV_BROADCAST_TYPES,
+  TV_CATEGORIES,
+  TV_STREAM_STATUS_META,
+  normalizeTvCategory,
+} from '../../lib/tvConstants';
 import type {
   PublicTvCatalogResponse,
   TvBroadcastItem,
@@ -38,8 +44,8 @@ interface ChariteTvHubProps {
 }
 
 type ActiveSelection =
-  | { kind: 'channel'; item: TvChannelItem; resumeSec?: number }
-  | { kind: 'broadcast'; item: TvBroadcastItem; resumeSec?: number };
+  | { kind: 'channel'; item: TvChannelItem; resumeSec?: number; autoSelected?: boolean }
+  | { kind: 'broadcast'; item: TvBroadcastItem; resumeSec?: number; autoSelected?: boolean };
 
 function formatDurationBadge(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -62,6 +68,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [failedChannelIds, setFailedChannelIds] = useState<number[]>([]);
 
   const [sectionMode, setSectionMode] = useState<'all' | 'live' | 'favorites'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -96,15 +103,19 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
       setActiveSelection((prev) => {
         if (prev) return prev;
         const liveBroadcast = publicCatalog.broadcasts.find((b) => b.status === 'live');
-        if (liveBroadcast) return { kind: 'broadcast', item: liveBroadcast };
-        if (publicCatalog.recommendedChannels[0]) {
-          return { kind: 'channel', item: publicCatalog.recommendedChannels[0] };
+        if (liveBroadcast) {
+          return { kind: 'broadcast', item: liveBroadcast, autoSelected: true };
         }
-        if (publicCatalog.channels[0]) {
-          return { kind: 'channel', item: publicCatalog.channels[0] };
+        const preferredChannel =
+          publicCatalog.recommendedChannels.find((c) => c.streamStatus === 'operational') ||
+          publicCatalog.channels.find((c) => c.streamStatus === 'operational') ||
+          publicCatalog.recommendedChannels[0] ||
+          publicCatalog.channels[0];
+        if (preferredChannel) {
+          return { kind: 'channel', item: preferredChannel, autoSelected: true };
         }
         if (publicCatalog.broadcasts[0]) {
-          return { kind: 'broadcast', item: publicCatalog.broadcasts[0] };
+          return { kind: 'broadcast', item: publicCatalog.broadcasts[0], autoSelected: true };
         }
         return null;
       });
@@ -123,38 +134,6 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
 
   const effectiveChurchId = churchId || catalog?.churchId || 0;
 
-  const selectChannel = (channel: TvChannelItem, resumeSec = 0) => {
-    setActiveSelection({ kind: 'channel', item: channel, resumeSec });
-    if (isAuthenticated && effectiveChurchId) {
-      apiFetch(`/api/churches/${effectiveChurchId}/tv/history`, {
-        method: 'POST',
-        body: JSON.stringify({
-          channelId: channel.id,
-          lastPositionSeconds: resumeSec,
-          durationSeconds: 0,
-        }),
-      })
-        .then(() => loadMemberStateOnly(effectiveChurchId))
-        .catch(() => {});
-    }
-  };
-
-  const selectBroadcast = (broadcast: TvBroadcastItem, resumeSec = 0) => {
-    setActiveSelection({ kind: 'broadcast', item: broadcast, resumeSec });
-    if (isAuthenticated && effectiveChurchId) {
-      apiFetch(`/api/churches/${effectiveChurchId}/tv/history`, {
-        method: 'POST',
-        body: JSON.stringify({
-          broadcastId: broadcast.id,
-          lastPositionSeconds: resumeSec,
-          durationSeconds: 0,
-        }),
-      })
-        .then(() => loadMemberStateOnly(effectiveChurchId))
-        .catch(() => {});
-    }
-  };
-
   const loadMemberStateOnly = async (cid: number) => {
     if (!isAuthenticated || !cid) return;
     try {
@@ -168,6 +147,44 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
       // ignore
     }
   };
+
+  const selectChannel = useCallback(
+    (channel: TvChannelItem, resumeSec = 0) => {
+      setActiveSelection({ kind: 'channel', item: channel, resumeSec, autoSelected: false });
+      if (isAuthenticated && effectiveChurchId) {
+        apiFetch(`/api/churches/${effectiveChurchId}/tv/history`, {
+          method: 'POST',
+          body: JSON.stringify({
+            channelId: channel.id,
+            lastPositionSeconds: resumeSec,
+            durationSeconds: 0,
+          }),
+        })
+          .then(() => loadMemberStateOnly(effectiveChurchId))
+          .catch(() => {});
+      }
+    },
+    [isAuthenticated, effectiveChurchId]
+  );
+
+  const selectBroadcast = useCallback(
+    (broadcast: TvBroadcastItem, resumeSec = 0) => {
+      setActiveSelection({ kind: 'broadcast', item: broadcast, resumeSec, autoSelected: false });
+      if (isAuthenticated && effectiveChurchId) {
+        apiFetch(`/api/churches/${effectiveChurchId}/tv/history`, {
+          method: 'POST',
+          body: JSON.stringify({
+            broadcastId: broadcast.id,
+            lastPositionSeconds: resumeSec,
+            durationSeconds: 0,
+          }),
+        })
+          .then(() => loadMemberStateOnly(effectiveChurchId))
+          .catch(() => {});
+      }
+    },
+    [isAuthenticated, effectiveChurchId]
+  );
 
   const handleToggleFavorite = async (channel: TvChannelItem) => {
     if (!isAuthenticated) {
@@ -184,7 +201,9 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
         res.added ? [...new Set([...prev, channel.id])] : prev.filter((id) => id !== channel.id)
       );
       setShareToast(
-        res.added ? `« ${channel.name} » ajoutée à vos favoris.` : `« ${channel.name} » retirée des favoris.`
+        res.added
+          ? `« ${channel.name} » ajoutée à vos favoris.`
+          : `« ${channel.name} » retirée des favoris.`
       );
       setTimeout(() => setShareToast(null), 3200);
     } catch {
@@ -195,7 +214,9 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
 
   const handleShare = async (title: string) => {
     const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-    const text = `Regardez « ${title} » sur CHARITAS TV — ${catalog?.churchName || 'CHARITAS — Église Saint Louis Roi d’Ebimpé'}`;
+    const text = `Regardez « ${title} » sur CHARITAS TV — ${
+      catalog?.churchName || 'CHARITAS — Église Saint Louis Roi d’Ebimpé'
+    }`;
     try {
       if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
         await navigator.share({ title: `CHARITAS TV · ${title}`, text, url: shareUrl });
@@ -205,7 +226,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
         setShareToast('Lien de la chaîne copié dans le presse-papiers.');
       }
     } catch {
-      // Ignore user-cancelled share dialog
+      // Ignore cancelled share dialog
     }
     setTimeout(() => setShareToast(null), 3200);
   };
@@ -231,9 +252,16 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
     const q = searchQuery.trim().toLowerCase();
     return base.filter((ch) => {
       if (sectionMode === 'favorites' && !favoriteIds.includes(ch.id)) return false;
-      if (selectedCategory !== 'all' && ch.category !== selectedCategory) return false;
+      if (
+        selectedCategory !== 'all' &&
+        normalizeTvCategory(ch.category) !== normalizeTvCategory(selectedCategory)
+      ) {
+        return false;
+      }
       if (q) {
-        const hay = `${ch.name} ${ch.category} ${ch.language} ${ch.country || ''} ${ch.description || ''} ${ch.currentProgram || ''}`.toLowerCase();
+        const hay = `${ch.name} ${ch.category} ${ch.language} ${ch.country || ''} ${
+          ch.description || ''
+        } ${ch.currentProgram || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -251,57 +279,103 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
     );
   }, [catalog?.broadcasts, searchQuery]);
 
+  const selectNextChannel = useCallback(() => {
+    const pool = filteredChannels.length > 0 ? filteredChannels : catalog?.channels || [];
+    if (pool.length === 0) return;
+    if (activeSelection?.kind === 'channel') {
+      const idx = pool.findIndex((c) => c.id === activeSelection.item.id);
+      const next = pool[(idx + 1) % pool.length];
+      if (next && next.id !== activeSelection.item.id) {
+        selectChannel(next);
+      }
+    } else if (pool[0]) {
+      selectChannel(pool[0]);
+    }
+  }, [filteredChannels, catalog?.channels, activeSelection, selectChannel]);
+
+  const handlePlayerFailure = useCallback(() => {
+    if (activeSelection?.kind === 'channel') {
+      const failedId = activeSelection.item.id;
+      setFailedChannelIds((prev) => (prev.includes(failedId) ? prev : [...prev, failedId]));
+      if (activeSelection.autoSelected) {
+        const fallback = (catalog?.channels || []).find(
+          (c) => c.id !== failedId && !failedChannelIds.includes(c.id)
+        );
+        if (fallback) {
+          setActiveSelection({ kind: 'channel', item: fallback, autoSelected: true });
+        }
+      }
+    }
+  }, [activeSelection, catalog?.channels, failedChannelIds]);
+
   const playerSource: PlayerSourceMeta | null = useMemo(() => {
     if (!activeSelection) return null;
     if (activeSelection.kind === 'channel') {
       const ch = activeSelection.item;
       return {
+        id: ch.id,
         title: ch.name,
-        subtitle: [ch.category, ch.language, ch.currentProgram].filter(Boolean).join(' · '),
+        subtitle: [
+          normalizeTvCategory(ch.category),
+          ch.language,
+          ch.country,
+          ch.currentProgram,
+        ]
+          .filter(Boolean)
+          .join(' · '),
         logoUrl: ch.logoUrl,
         streamUrl: ch.streamUrl,
         streamFormat: ch.streamFormat,
         isLive: true,
+        country: ch.country,
+        language: ch.language,
+        category: normalizeTvCategory(ch.category),
       };
     }
     const br = activeSelection.item;
     const typeLabel =
       TV_BROADCAST_TYPES.find((t) => t.value === br.broadcastType)?.label || br.broadcastType;
     return {
+      id: br.id,
       title: br.title,
       subtitle: [typeLabel, br.speakerName].filter(Boolean).join(' · '),
       logoUrl: br.thumbnailUrl,
       streamUrl: br.streamUrl,
-      streamFormat: br.ingestProvider === 'replay_mp4' ? 'mp4' : br.ingestProvider === 'youtube_live' || br.ingestProvider === 'vimeo' ? 'embed' : 'hls',
+      streamFormat:
+        br.ingestProvider === 'replay_mp4'
+          ? 'mp4'
+          : br.ingestProvider === 'youtube_live' || br.ingestProvider === 'vimeo'
+            ? 'embed'
+            : 'hls',
       isLive: br.status === 'live',
     };
   }, [activeSelection]);
 
   const liveCount = (catalog?.broadcasts || []).filter((b) => b.status === 'live').length;
+  const activeChannelCount = catalog?.channels.length || 0;
 
   return (
     <div className="space-y-6">
-      {/* Top Banner Header */}
-      <div className="rounded-3xl bg-gradient-to-br from-[#04112B] via-[#0A255C] to-[#1D4ED8] text-white p-5 sm:p-7 shadow-[0_18px_50px_-15px_rgba(4,17,43,0.6)]">
+      {/* CHARITAS TV Hero Header */}
+      <div className="rounded-3xl bg-gradient-to-br from-[#04112B] via-[#061A40] to-[#1D4ED8] text-white p-5 sm:p-6 shadow-[0_18px_50px_-15px_rgba(4,17,43,0.6)]">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-semibold text-[#F5B82E]">
-              <Tv className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>CHARITAS TV &amp; CHARITAS Live</span>
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#F5B82E]">
+              <Tv className="w-4 h-4" aria-hidden="true" />
+              <span>CHARITAS TV — Église Saint Louis Roi d’Ebimpé</span>
               {liveCount > 0 && (
-                <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px]">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-bold uppercase">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                   {liveCount} direct{liveCount > 1 ? 's' : ''}
                 </span>
               )}
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              Chaînes chrétiennes &amp; Retransmissions de la paroisse
+              Télévisions chrétiennes en direct &amp; Cultes de la paroisse
             </h1>
             <p className="text-xs sm:text-sm text-blue-100/90 max-w-2xl">
-              Regardez gratuitement et sans inscription les chaînes chrétiennes validées, les
-              cultes en direct de l’Église Saint Louis Roi d’Ebimpé, les prédications et les
-              émissions gospel.
+              Accès libre sans inscription : chaînes chrétiennes vérifiées (africaines, francophones,
+              internationales, gospel et enseignements bibliques) avec lecteur adaptatif HLS.
             </p>
           </div>
 
@@ -310,7 +384,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
               <button
                 type="button"
                 onClick={onOpenAdminPanel}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#F5B82E] hover:bg-[#FACC15] text-[#061A40] text-xs font-bold inline-flex items-center gap-2 cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F5B82E] hover:bg-[#FACC15] text-[#04112B] text-xs font-bold inline-flex items-center gap-2 cursor-pointer"
               >
                 <SlidersHorizontal className="w-4 h-4" />
                 Régie &amp; Catalogue IPTV
@@ -320,7 +394,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenAuth('login')}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-white/12 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-white/12 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold cursor-pointer"
               >
                 Connexion (Favoris &amp; Historique)
               </button>
@@ -338,7 +412,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
           </div>
         </div>
 
-        {/* Navigation Pills + Search */}
+        {/* Navigation Segmented Tabs + Search */}
         <div className="mt-5 pt-4 border-t border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -346,18 +420,18 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
               onClick={() => setSectionMode('all')}
               className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
                 sectionMode === 'all'
-                  ? 'bg-[#F5B82E] text-[#061A40]'
+                  ? 'bg-[#F5B82E] text-[#04112B]'
                   : 'bg-white/10 text-blue-100 hover:bg-white/15'
               }`}
             >
-              Chaînes TV ({catalog?.channels.length || 0})
+              Chaînes TV ({activeChannelCount})
             </button>
             <button
               type="button"
               onClick={() => setSectionMode('live')}
               className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                 sectionMode === 'live'
-                  ? 'bg-[#F5B82E] text-[#061A40]'
+                  ? 'bg-[#F5B82E] text-[#04112B]'
                   : 'bg-white/10 text-blue-100 hover:bg-white/15'
               }`}
             >
@@ -370,7 +444,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
                 onClick={() => setSectionMode('favorites')}
                 className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                   sectionMode === 'favorites'
-                    ? 'bg-[#F5B82E] text-[#061A40]'
+                    ? 'bg-[#F5B82E] text-[#04112B]'
                     : 'bg-white/10 text-blue-100 hover:bg-white/15'
                 }`}
               >
@@ -386,7 +460,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher une chaîne, émission, langue..."
+              placeholder="Rechercher une chaîne, pays, langue..."
               aria-label="Rechercher sur CHARITAS TV"
               className="w-full h-11 pl-10 pr-4 rounded-xl bg-white/12 border border-white/20 text-sm text-white placeholder:text-blue-200/75 focus:outline-none focus:ring-2 focus:ring-[#F5B82E]"
             />
@@ -411,53 +485,288 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
       )}
 
       {loading && !catalog ? (
-        <div className="py-16 text-center space-y-3">
+        <div className="py-16 text-center space-y-3 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           <Loader2 className="w-7 h-7 animate-spin mx-auto text-[#1D4ED8] dark:text-[#F5B82E]" />
+          <p className="text-sm font-semibold text-[#061A40] dark:text-white">
+            Chargement de la chaîne...
+          </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Chargement des flux vérifiés de CHARITAS TV...
+            Récupération des flux chrétiens opérationnels de CHARITAS TV.
           </p>
         </div>
       ) : (
         <>
-          {/* Active Video Player */}
-          {playerSource && (
-            <HlsVideoPlayer
-              source={playerSource}
-              initialPositionSeconds={activeSelection?.resumeSec || 0}
-              onProgress={isAuthenticated ? handleProgressSave : undefined}
-              actionsSlot={
-                <div className="flex items-center gap-2">
-                  {activeSelection?.kind === 'channel' && (
+          {/* Responsive Theater Split:
+              - Mobile: Player FIRST at top, Catalogue directly BELOW
+              - Desktop (lg+): Main Player (8 cols) + Lateral Catalogue Column (4 cols) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* LEFT / TOP: Main Video Player + Active Details */}
+            <div className="lg:col-span-8 space-y-4 order-1">
+              {playerSource ? (
+                <HlsVideoPlayer
+                  source={playerSource}
+                  initialPositionSeconds={activeSelection?.resumeSec || 0}
+                  autoPlayMuted
+                  onProgress={isAuthenticated ? handleProgressSave : undefined}
+                  onPlaybackFailed={handlePlayerFailure}
+                  onNextChannel={activeChannelCount > 1 ? selectNextChannel : undefined}
+                  actionsSlot={
+                    <div className="flex items-center gap-2">
+                      {activeSelection?.kind === 'channel' && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFavorite(activeSelection.item)}
+                          className={`min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer ${
+                            favoriteIds.includes(activeSelection.item.id)
+                              ? 'bg-[#F5B82E] border-[#F5B82E] text-[#04112B]'
+                              : 'bg-white/10 border-white/20 text-white hover:bg-white/15'
+                          }`}
+                        >
+                          <Star
+                            className={`w-3.5 h-3.5 ${
+                              favoriteIds.includes(activeSelection.item.id) ? 'fill-[#04112B]' : ''
+                            }`}
+                          />
+                          <span className="hidden sm:inline">
+                            {favoriteIds.includes(activeSelection.item.id)
+                              ? 'Favori'
+                              : 'Ajouter favori'}
+                          </span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleShare(playerSource.title)}
+                        className="min-h-[38px] px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Partager</span>
+                      </button>
+                    </div>
+                  }
+                />
+              ) : (
+                <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-[#04112B] text-white p-10 text-center space-y-3">
+                  <Tv className="w-11 h-11 mx-auto text-[#F5B82E]" />
+                  <h2 className="text-lg font-bold">Aucune chaîne disponible pour le moment</h2>
+                  <p className="text-xs sm:text-sm text-blue-100/80 max-w-md mx-auto">
+                    Aucune chaîne chrétienne opérationnelle n’est actuellement active dans ce
+                    catalogue.
+                  </p>
+                  {canManageStreams && onOpenAdminPanel && (
                     <button
                       type="button"
-                      onClick={() => handleToggleFavorite(activeSelection.item)}
-                      className={`min-h-[36px] px-3 py-1.5 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer ${
-                        favoriteIds.includes(activeSelection.item.id)
-                          ? 'bg-[#F5B82E] border-[#F5B82E] text-[#061A40]'
-                          : 'bg-white/10 border-white/20 text-white hover:bg-white/15'
-                      }`}
+                      onClick={onOpenAdminPanel}
+                      className="mt-2 min-h-[44px] px-5 py-2 rounded-xl bg-[#F5B82E] text-[#04112B] text-xs font-bold cursor-pointer"
                     >
-                      <Star
-                        className={`w-3.5 h-3.5 ${
-                          favoriteIds.includes(activeSelection.item.id) ? 'fill-[#061A40]' : ''
-                        }`}
-                      />
-                      <span className="hidden sm:inline">
-                        {favoriteIds.includes(activeSelection.item.id) ? 'Favori' : 'Ajouter favori'}
-                      </span>
+                      Importer &amp; Valider des chaînes dans la Régie
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Active Channel Metadata Bar */}
+              {activeSelection?.kind === 'channel' && (
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 flex-wrap">
+                      <span className="font-bold text-[#061A40] dark:text-white">
+                        {normalizeTvCategory(activeSelection.item.category)}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>{activeSelection.item.language}</span>
+                      {activeSelection.item.country && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span>{activeSelection.item.country}</span>
+                        </>
+                      )}
+                      <span aria-hidden="true">·</span>
+                      <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {TV_STREAM_STATUS_META[activeSelection.item.streamStatus]?.label ||
+                          'Opérationnel'}
+                      </span>
+                    </div>
+                    {activeSelection.item.description && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                        {activeSelection.item.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT / BELOW: Lateral Channel Catalogue */}
+            <aside
+              aria-label="Catalogue latéral des chaînes CHARITAS TV"
+              className="lg:col-span-4 order-2 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-col gap-3"
+            >
+              <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <h2 className="text-sm font-bold text-[#061A40] dark:text-white">
+                    Catalogue des chaînes
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                    {filteredChannels.length} chaîne{filteredChannels.length > 1 ? 's' : ''} prête
+                    {filteredChannels.length > 1 ? 's' : ''} à lire
+                  </p>
+                </div>
+                {selectedCategory !== 'all' && (
                   <button
                     type="button"
-                    onClick={() => handleShare(playerSource.title)}
-                    className="min-h-[36px] px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                    onClick={() => setSelectedCategory('all')}
+                    className="text-[11px] font-semibold text-[#1D4ED8] dark:text-[#60A5FA] hover:underline cursor-pointer"
                   >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Partager</span>
+                    Tout voir
                   </button>
+                )}
+              </div>
+
+              {filteredChannels.length === 0 ? (
+                <div className="py-10 px-4 text-center space-y-2">
+                  <Tv className="w-8 h-8 mx-auto text-slate-400" />
+                  <p className="text-xs font-semibold text-[#061A40] dark:text-white">
+                    {sectionMode === 'favorites'
+                      ? 'Aucune chaîne favorite enregistrée'
+                      : 'Aucune chaîne trouvée'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Modifiez votre recherche ou choisissez une autre catégorie ci-dessous.
+                  </p>
                 </div>
-              }
-            />
+              ) : (
+                <div className="space-y-2 max-h-[540px] overflow-y-auto pr-1">
+                  {filteredChannels.map((ch) => {
+                    const isSelected =
+                      activeSelection?.kind === 'channel' && activeSelection.item.id === ch.id;
+                    const isFav = favoriteIds.includes(ch.id);
+                    const hasPlayerWarning = failedChannelIds.includes(ch.id);
+                    const statusLabel = hasPlayerWarning
+                      ? 'À réessayer'
+                      : TV_STREAM_STATUS_META[ch.streamStatus]?.label || 'Opérationnel';
+
+                    return (
+                      <div
+                        key={ch.id}
+                        className={`rounded-2xl border p-3 transition-colors flex items-center gap-3 ${
+                          isSelected
+                            ? 'border-[#1D4ED8] bg-blue-50/70 dark:bg-[#0B2252] ring-1 ring-[#1D4ED8]/40'
+                            : 'border-slate-200/80 dark:border-slate-800 hover:border-[#1D4ED8]/60 bg-slate-50/50 dark:bg-slate-950/60'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => selectChannel(ch)}
+                          className="flex-1 min-w-0 flex items-center gap-3 text-left cursor-pointer"
+                        >
+                          <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shrink-0 flex items-center justify-center">
+                            {ch.logoUrl ? (
+                              <ResilientImage
+                                key={ch.logoUrl}
+                                src={ch.logoUrl}
+                                alt={ch.name}
+                                className="w-full h-full object-contain p-1"
+                              />
+                            ) : (
+                              <Tv className="w-5 h-5 text-[#1D4ED8]" />
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-bold text-[#061A40] dark:text-white truncate">
+                                {ch.name}
+                              </p>
+                              {isSelected && (
+                                <span className="shrink-0 text-[10px] font-bold text-[#1D4ED8] dark:text-[#F5B82E]">
+                                  En lecture
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-[11px] text-[#1D4ED8] dark:text-[#60A5FA] truncate">
+                              {normalizeTvCategory(ch.category)}
+                            </p>
+
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                              <span>{ch.language}</span>
+                              {ch.country && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span>{ch.country}</span>
+                                </>
+                              )}
+                              <span aria-hidden="true">·</span>
+                              <span
+                                className={
+                                  hasPlayerWarning
+                                    ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                                    : 'text-emerald-700 dark:text-emerald-400 font-semibold'
+                                }
+                              >
+                                {statusLabel}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFavorite(ch)}
+                          className={`min-w-[40px] min-h-[40px] rounded-xl flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
+                            isFav
+                              ? 'text-[#B45309] dark:text-[#F5B82E] bg-amber-100/70 dark:bg-amber-950/50'
+                              : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                          }`}
+                          aria-label={
+                            isFav
+                              ? `Retirer ${ch.name} des favoris`
+                              : `Ajouter ${ch.name} aux favoris`
+                          }
+                        >
+                          <Star className={`w-4 h-4 ${isFav ? 'fill-current' : ''}`} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </aside>
+          </div>
+
+          {/* Interactive Categories Filter Strip */}
+          {sectionMode !== 'live' && (
+            <section className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                    selectedCategory === 'all'
+                      ? 'bg-[#061A40] text-white border-[#061A40] dark:bg-[#1D4ED8] dark:border-[#1D4ED8]'
+                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-[#1D4ED8]'
+                  }`}
+                >
+                  Toutes les catégories
+                </button>
+                {TV_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                      normalizeTvCategory(selectedCategory) === cat && selectedCategory !== 'all'
+                        ? 'bg-[#061A40] text-white border-[#061A40] dark:bg-[#1D4ED8] dark:border-[#1D4ED8]'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-[#1D4ED8]'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </section>
           )}
 
           {/* Member Watch History & Resume Playback Strip */}
@@ -465,14 +774,17 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
             <section className="space-y-3">
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-[#1D4ED8] dark:text-[#60A5FA]" />
-                <h2 className="text-sm font-bold text-[#061A40] dark:text-white">
+                <h2 className="text-base font-bold text-[#061A40] dark:text-white">
                   Dernières chaînes &amp; émissions regardées
                 </h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {history.slice(0, 4).map((h) => {
                   const title = h.channel?.name || h.broadcast?.title || 'Émission';
-                  const sub = h.channel?.category || h.broadcast?.speakerName || 'Rediffusion';
+                  const sub =
+                    (h.channel ? normalizeTvCategory(h.channel.category) : null) ||
+                    h.broadcast?.speakerName ||
+                    'Rediffusion';
                   const canResume = h.lastPositionSeconds > 10;
                   return (
                     <button
@@ -510,7 +822,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
           {/* CHARITAS Live Section (Church Broadcasts) */}
           {(sectionMode === 'live' || (catalog?.broadcasts.length || 0) > 0) && (
             <section className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Radio className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                   <h2 className="text-lg font-bold text-[#061A40] dark:text-white">
@@ -518,7 +830,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
                   </h2>
                 </div>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  Diffusions officielles de la communauté
+                  Retransmissions officielles de l’Église Saint Louis Roi d’Ebimpé
                 </span>
               </div>
 
@@ -557,12 +869,12 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
                           )}
                           <div className="absolute top-3 left-3 flex items-center gap-2">
                             {br.status === 'live' ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-600 text-white text-[11px] font-bold shadow">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-600 text-white text-[11px] font-bold shadow">
                                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                                 EN DIRECT
                               </span>
                             ) : (
-                              <span className="px-2.5 py-1 rounded-full bg-[#061A40]/85 text-[#F5B82E] text-[11px] font-semibold">
+                              <span className="px-2.5 py-1 rounded-md bg-[#061A40]/90 text-[#F5B82E] text-[11px] font-semibold">
                                 {br.status === 'replay' ? 'Rediffusion' : 'Programmé'}
                               </span>
                             )}
@@ -597,7 +909,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
                             <button
                               type="button"
                               onClick={() => selectBroadcast(br)}
-                              className="flex-1 min-h-[40px] px-3 rounded-xl bg-[#1D4ED8] hover:bg-[#1E40AF] text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                              className="flex-1 min-h-[42px] px-3 rounded-xl bg-[#1D4ED8] hover:bg-[#1E40AF] text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
                             >
                               <Play className="w-3.5 h-3.5" />
                               Regarder
@@ -605,7 +917,7 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
                             <button
                               type="button"
                               onClick={() => handleShare(br.title)}
-                              className="min-h-[40px] w-10 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 cursor-pointer"
+                              className="min-h-[42px] w-11 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 cursor-pointer"
                               aria-label={`Partager ${br.title}`}
                             >
                               <Share2 className="w-4 h-4" />
@@ -620,205 +932,61 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
             </section>
           )}
 
-          {/* Recommendations + 8 Categories + Validated Channels Grid */}
-          {sectionMode !== 'live' && (
-            <>
-              {(catalog?.recommendedChannels.length || 0) > 0 && selectedCategory === 'all' && !searchQuery && sectionMode === 'all' && (
-                <section className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#F5B82E]" />
-                    <h2 className="text-base font-bold text-[#061A40] dark:text-white">
-                      Contenus &amp; Chaînes recommandés
-                    </h2>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                    {catalog!.recommendedChannels.map((ch) => (
-                      <button
-                        key={ch.id}
-                        type="button"
-                        onClick={() => selectChannel(ch)}
-                        className="text-left rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/70 to-white dark:from-[#0E1E3E] dark:to-slate-900 p-4 hover:shadow-md transition-all flex items-center gap-3 cursor-pointer"
-                      >
-                        <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shrink-0 flex items-center justify-center">
-                          {ch.logoUrl ? (
-                            <ResilientImage
-                              src={ch.logoUrl}
-                              alt={ch.name}
-                              className="w-full h-full object-contain p-1"
-                            />
-                          ) : (
-                            <Tv className="w-5 h-5 text-[#1D4ED8]" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-[#061A40] dark:text-white truncate">
-                            {ch.name}
-                          </p>
-                          <p className="text-[11px] text-amber-700 dark:text-[#F5B82E] truncate">
-                            {ch.category}
-                          </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                            {ch.currentProgram || ch.language}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* 8 Validated Categories Bar */}
-              <section className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCategory('all')}
-                    className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
-                      selectedCategory === 'all'
-                        ? 'bg-[#061A40] text-white border-[#061A40] dark:bg-[#1D4ED8] dark:border-[#1D4ED8]'
-                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-[#1D4ED8]'
-                    }`}
-                  >
-                    Toutes les catégories
-                  </button>
-                  {TV_CATEGORIES.map((cat) => (
+          {/* Recommended Channels Showcase Strip */}
+          {sectionMode !== 'live' && (catalog?.recommendedChannels.length || 0) > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#F5B82E]" />
+                <h2 className="text-base font-bold text-[#061A40] dark:text-white">
+                  Sélection recommandée CHARITAS TV
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {catalog!.recommendedChannels.map((ch) => {
+                  const isSelected =
+                    activeSelection?.kind === 'channel' && activeSelection.item.id === ch.id;
+                  return (
                     <button
-                      key={cat}
+                      key={ch.id}
                       type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
-                        selectedCategory === cat
-                          ? 'bg-[#061A40] text-white border-[#061A40] dark:bg-[#1D4ED8] dark:border-[#1D4ED8]'
-                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-[#1D4ED8]'
+                      onClick={() => selectChannel(ch)}
+                      className={`text-left rounded-2xl border p-4 transition-all flex items-center gap-3 cursor-pointer ${
+                        isSelected
+                          ? 'border-[#1D4ED8] bg-blue-50/70 dark:bg-[#0E2450]'
+                          : 'border-amber-200/80 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/70 to-white dark:from-[#0E1E3E] dark:to-slate-900 hover:border-[#1D4ED8]'
                       }`}
                     >
-                      {cat}
+                      <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shrink-0 flex items-center justify-center">
+                        {ch.logoUrl ? (
+                          <ResilientImage
+                            key={`rec-${ch.logoUrl}`}
+                            src={ch.logoUrl}
+                            alt={ch.name}
+                            className="w-full h-full object-contain p-1"
+                          />
+                        ) : (
+                          <Tv className="w-5 h-5 text-[#1D4ED8]" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[#061A40] dark:text-white truncate">
+                          {ch.name}
+                        </p>
+                        <p className="text-[11px] text-[#B45309] dark:text-[#F5B82E] truncate">
+                          {normalizeTvCategory(ch.category)}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 inline-flex items-center gap-1 truncate max-w-full">
+                          <Globe className="w-3 h-3 shrink-0" />
+                          <span className="truncate">
+                            {[ch.language, ch.country].filter(Boolean).join(' · ')}
+                          </span>
+                        </p>
+                      </div>
                     </button>
-                  ))}
-                </div>
-
-                {filteredChannels.length === 0 ? (
-                  <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
-                    <Tv className="w-10 h-10 mx-auto text-slate-400" />
-                    <h3 className="text-base font-bold text-[#061A40] dark:text-white">
-                      {sectionMode === 'favorites'
-                        ? 'Aucune chaîne favorite enregistrée'
-                        : 'Aucune chaîne disponible dans cette sélection'}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-lg mx-auto">
-                      Seules les chaînes chrétiennes manuellement validées, autorisées et dont le
-                      flux HLS/vidéo fonctionne en direct sont publiées sur CHARITAS TV.
-                    </p>
-                    {canManageStreams && onOpenAdminPanel && (
-                      <button
-                        type="button"
-                        onClick={onOpenAdminPanel}
-                        className="mt-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-[#1D4ED8] hover:bg-[#1E40AF] text-white text-xs font-semibold inline-flex items-center gap-2 cursor-pointer"
-                      >
-                        <SlidersHorizontal className="w-4 h-4" />
-                        Ouvrir la Régie Admin CHARITAS TV
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {filteredChannels.map((ch) => {
-                      const isSelected =
-                        activeSelection?.kind === 'channel' && activeSelection.item.id === ch.id;
-                      const isFav = favoriteIds.includes(ch.id);
-                      return (
-                        <article
-                          key={ch.id}
-                          className={`rounded-2xl border bg-white dark:bg-slate-900 p-4 flex flex-col justify-between gap-4 transition-all ${
-                            isSelected
-                              ? 'border-[#1D4ED8] ring-2 ring-[#1D4ED8]/25 shadow-md'
-                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 shrink-0 flex items-center justify-center">
-                                {ch.logoUrl ? (
-                                  <ResilientImage
-                                    src={ch.logoUrl}
-                                    alt={ch.name}
-                                    className="w-full h-full object-contain p-1.5"
-                                  />
-                                ) : (
-                                  <Tv className="w-6 h-6 text-[#1D4ED8]" />
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                  Direct vérifié
-                                </span>
-                              </div>
-                            </div>
-
-                            <div>
-                              <h3 className="text-sm font-bold text-[#061A40] dark:text-white line-clamp-1">
-                                {ch.name}
-                              </h3>
-                              <p className="mt-0.5 text-[11px] font-semibold text-[#1D4ED8] dark:text-[#60A5FA] truncate">
-                                {ch.category}
-                              </p>
-                              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
-                                {ch.currentProgram ||
-                                  ch.description ||
-                                  'Diffusion chrétienne en continu'}
-                              </p>
-                            </div>
-
-                            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                              <Globe className="w-3.5 h-3.5 shrink-0" />
-                              <span className="truncate">
-                                {[ch.language, ch.country].filter(Boolean).join(' · ')}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => selectChannel(ch)}
-                              className="flex-1 min-h-[42px] px-3 rounded-xl bg-[#061A40] hover:bg-[#0E2F6E] dark:bg-[#1D4ED8] dark:hover:bg-[#2563EB] text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
-                            >
-                              <Play className="w-3.5 h-3.5" />
-                              Regarder
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleFavorite(ch)}
-                              className={`min-h-[42px] w-11 rounded-xl border flex items-center justify-center cursor-pointer ${
-                                isFav
-                                  ? 'bg-[#F5B82E]/15 border-[#F5B82E] text-[#B45309] dark:text-[#F5B82E]'
-                                  : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                              }`}
-                              aria-label={
-                                isFav
-                                  ? `Retirer ${ch.name} des favoris`
-                                  : `Ajouter ${ch.name} aux favoris`
-                              }
-                            >
-                              <Star className={`w-4 h-4 ${isFav ? 'fill-current' : ''}`} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleShare(ch.name)}
-                              className="min-h-[42px] w-11 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer"
-                              aria-label={`Partager ${ch.name}`}
-                            >
-                              <Share2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            </>
+                  );
+                })}
+              </div>
+            </section>
           )}
         </>
       )}

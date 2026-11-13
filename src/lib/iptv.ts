@@ -4,12 +4,18 @@ import { eq } from 'drizzle-orm';
 import { withTenantContext } from '../db/index.ts';
 import { churches, tvChannels } from '../db/schema.ts';
 import { parseVideoMedia } from './media.ts';
-import { IPTV_ORG_RELIGIOUS_PLAYLIST_URL, TV_CATEGORIES, type TvCategory } from './tvConstants.ts';
+import {
+  IPTV_ORG_RELIGIOUS_PLAYLIST_URL,
+  TV_CATEGORIES,
+  normalizeTvCategory,
+  type TvCategory,
+} from './tvConstants.ts';
 
 export interface ParsedM3uEntry {
   index: number;
   name: string;
   streamUrl: string;
+  httpProtocol: 'https' | 'http';
   logoUrl: string | null;
   tvgId: string | null;
   groupTitle: string | null;
@@ -22,12 +28,18 @@ export interface ParsedM3uEntry {
 }
 
 export interface StreamProbeResult {
-  status: 'operational' | 'unavailable' | 'pending_check';
+  status: 'operational' | 'unavailable' | 'incompatible' | 'pending_check';
   httpStatus: number | null;
   error: string | null;
   detectedFormat: 'hls' | 'mp4' | 'embed';
+  corsAllowed: boolean;
+  httpsCompatible: boolean;
+  segmentChecked: boolean;
   checkedAt: string;
 }
+
+const NON_CHRISTIAN_PATTERN =
+  /\b(islam|islamic|quran|qur'an|coran|muslim|makkah|mecca|madina|medina|madani|shia|sunni|ahmadiyya|mta\d*|azan|adhan|iqra|al-?resalah|huda\s*tv|peace\s*tv|al-?majd|kalamullah|hindu|hinduism|sanskar|aastha|bhakti|satsang|vedic|buddh|buddhist|dharma|sikh|khalsa|jewish|torah|judaism|scientolog|tawaftv|haramain)\b/i;
 
 const CHRISTIAN_KEYWORDS = [
   'christ',
@@ -43,31 +55,16 @@ const CHRISTIAN_KEYWORDS = [
   'jesus',
   'jésus',
   'gospel',
-  'god',
   'dieu',
   'bible',
   'biblique',
-  'prayer',
   'prière',
   'priere',
   'church',
   'église',
   'eglise',
-  'grace',
-  'grâce',
-  'hope',
-  'esperance',
-  'espérance',
-  'faith',
-  'foi',
-  'heaven',
-  'miracle',
-  'shalom',
-  'maranatha',
-  'hallelu',
-  'alleluia',
-  'parish',
   'paroisse',
+  'parish',
   'vatican',
   'tbn',
   '3abn',
@@ -78,8 +75,60 @@ const CHRISTIAN_KEYWORDS = [
   'louange',
   'adoration',
   'salvation',
-  'saint',
+  'hope channel',
+  'esperanza',
+  'maria',
+  'maranatha',
+  'shalom',
+  'angelus',
+  'capuchin',
+  'telepace',
+  'bethel',
+  'amazing facts',
+  'amazing discoveries',
+  'faith africa',
+  'sonlife',
+  'redeem',
+  'coptic',
+  'orthodox',
 ];
+
+const COUNTRY_CODE_LABELS: Record<string, string> = {
+  ci: "Côte d'Ivoire",
+  fr: 'France',
+  be: 'Belgique',
+  ch: 'Suisse',
+  ca: 'Canada',
+  us: 'États-Unis',
+  uk: 'Royaume-Uni',
+  gb: 'Royaume-Uni',
+  tg: 'Togo',
+  bj: 'Bénin',
+  sn: 'Sénégal',
+  cm: 'Cameroun',
+  cd: 'RD Congo',
+  cg: 'Congo',
+  ke: 'Kenya',
+  ng: 'Nigeria',
+  gh: 'Ghana',
+  ug: 'Ouganda',
+  za: 'Afrique du Sud',
+  br: 'Brésil',
+  es: 'Espagne',
+  ar: 'Argentine',
+  co: 'Colombie',
+  pe: 'Pérou',
+  ro: 'Roumanie',
+  de: 'Allemagne',
+  pl: 'Pologne',
+  ua: 'Ukraine',
+  it: 'Italie',
+  jm: 'Jamaïque',
+  in: 'Inde',
+  ru: 'Russie',
+  hu: 'Hongrie',
+  au: 'Australie',
+};
 
 const BLOCKED_HOSTNAMES = new Set([
   'localhost',
@@ -100,16 +149,16 @@ function isPrivateOrReservedIp(ip: string): boolean {
     if (a === 169 && b === 254) return true;
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-    if (a >= 224) return true; // Multicast / reserved
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a >= 224) return true;
     return false;
   }
   if (version === 6) {
     const norm = ip.toLowerCase();
     if (norm === '::' || norm === '::1') return true;
-    if (norm.startsWith('fc') || norm.startsWith('fd')) return true; // ULA
+    if (norm.startsWith('fc') || norm.startsWith('fd')) return true;
     if (norm.startsWith('fe8') || norm.startsWith('fe9') || norm.startsWith('fea') || norm.startsWith('feb')) {
-      return true; // Link-local
+      return true;
     }
     if (norm.startsWith('::ffff:')) {
       return isPrivateOrReservedIp(norm.slice('::ffff:'.length));
@@ -202,16 +251,72 @@ function sanitizeText(val: string | null | undefined, maxLen = 220): string {
   return val
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/[<>]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
     .slice(0, maxLen);
 }
 
 function extractExtInfAttr(extInfLine: string, attrName: string): string | null {
-  const regex = new RegExp(`${attrName}="([^"]*)"`, 'i');
+  const regex = new RegExp(`(?:^|\\s)${attrName}=(?:"([^"]*)"|'([^']*)')`, 'i');
   const match = extInfLine.match(regex);
-  if (!match || !match[1]) return null;
-  const cleaned = sanitizeText(match[1], 500);
+  const raw = match?.[1] ?? match?.[2];
+  if (!raw) return null;
+  const cleaned = sanitizeText(raw, 500);
   return cleaned || null;
+}
+
+function extractDisplayNameFromExtInf(extInfLine: string): string | null {
+  let inDouble = false;
+  let inSingle = false;
+  let splitCommaIdx = -1;
+  for (let i = 0; i < extInfLine.length; i++) {
+    const ch = extInfLine[i];
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === ',' && !inDouble && !inSingle) {
+      splitCommaIdx = i;
+      break;
+    }
+  }
+  if (splitCommaIdx >= 0) {
+    const afterComma = sanitizeText(extInfLine.slice(splitCommaIdx + 1), 160);
+    if (afterComma) return afterComma;
+  }
+  return extractExtInfAttr(extInfLine, 'tvg-name');
+}
+
+function inferCountryFromTvgId(tvgId: string | null): string | null {
+  if (!tvgId) return null;
+  const m = tvgId.match(/\.([a-z]{2})(?:@|$)/i);
+  if (!m) return null;
+  return COUNTRY_CODE_LABELS[m[1].toLowerCase()] || m[1].toUpperCase();
+}
+
+function inferLanguageLabel(name: string, extInf: string, country: string | null): string {
+  const attrLang = extractExtInfAttr(extInf, 'tvg-language');
+  if (attrLang) {
+    if (/^(fr|fre|fra|french|français|francais)$/i.test(attrLang)) return 'Français';
+    if (/^(en|eng|english|anglais)$/i.test(attrLang)) return 'Anglais';
+    if (/^(es|spa|spanish|espagnol)$/i.test(attrLang)) return 'Espagnol';
+    if (/^(pt|por|portuguese|portugais)$/i.test(attrLang)) return 'Portugais';
+    return attrLang;
+  }
+  const combined = `${name} ${extInf}`.toLowerCase();
+  if (/(^|\b)(fr|french|français|francais|kto|emci|lumen|evandis)(\b|$)/i.test(combined)) {
+    return 'Français';
+  }
+  if (/afri|uganda|kenya|nigeria|ghana|south africa/i.test(combined)) {
+    return 'Anglais / Afrique';
+  }
+  if (country === 'France' || country === 'Belgique' || country === "Côte d'Ivoire" || country === 'Togo') {
+    return 'Français';
+  }
+  if (/(espan|spanish|enlace|canal de la fe|bethel|viento|oracion|jujuy|santa maria|telefamilia|telesantiago|radio maya)/i.test(combined)) {
+    return 'Espagnol';
+  }
+  return 'Anglais / International';
 }
 
 function inferCategory(name: string, group: string | null, language: string, country: string | null): TvCategory {
@@ -222,39 +327,45 @@ function inferCategory(name: string, group: string | null, language: string, cou
   if (/conférence|conference|summit|congrès|congres/.test(combined)) {
     return 'Conférences chrétiennes';
   }
-  if (/bible|biblique|teaching|enseignement|catéch|catech|study|étude/.test(combined)) {
+  if (/bible|biblique|teaching|enseignement|catéch|catech|study|étude|amazing facts|discoveries/.test(combined)) {
     return 'Enseignements bibliques';
   }
-  if (/prédic|predic|sermon|preach|evangel/.test(combined)) {
+  if (/prédic|predic|sermon|preach|proclaim/.test(combined)) {
     return 'Prédications';
   }
-  if (/culte|messe|mass|service|live|direct|sanctuaire/.test(combined)) {
+  if (/culte|messe|mass|service|sanctuaire|angelus/.test(combined)) {
     return 'Cultes en direct';
   }
   if (
-    /afri|côte d'ivoire|cote d'ivoire|ivory|ci|benin|bénin|togo|congo|cameroun|cameroon|senegal|sénégal|burkina|mali|ghana|nigeria|kenya|rwanda|gabon|madagascar|emci|lumen/.test(
+    /afri|côte d'ivoire|cote d'ivoire|ivory|benin|bénin|togo|congo|cameroun|cameroon|senegal|sénégal|burkina|mali|ghana|nigeria|kenya|rwanda|gabon|madagascar|uganda|ouganda|afrique du sud|emci|lumen|capuchin/.test(
       combined
     )
   ) {
-    return 'TV chrétiennes africaines';
+    return 'Chaînes chrétiennes africaines';
   }
-  if (/fr|franc|kto|emci|lumen|espoir|dieu tv|phare/.test(combined)) {
-    return 'TV chrétiennes francophones';
+  if (/français|francais|french|france|kto|emci|lumen|espoir|dieu tv|phare|evandis/.test(combined)) {
+    return 'Chaînes chrétiennes francophones';
   }
-  return 'TV chrétiennes internationales';
+  return 'Chaînes chrétiennes internationales';
+}
+
+function normalizeUrlDedupeKey(rawUrl: URL): string {
+  return `${rawUrl.protocol}//${rawUrl.host.toLowerCase()}${rawUrl.pathname}${rawUrl.search}`;
 }
 
 /**
  * Strictly parses an M3U/M3U8 playlist string as inert text data (never executes scripts/HTML).
+ * Deduplicates by normalized stream URL and applies Christian/non-Christian classification.
  */
-export function parseM3uPlaylistText(rawText: string, maxEntries = 600): ParsedM3uEntry[] {
+export function parseM3uPlaylistText(rawText: string, maxEntries = 3000): ParsedM3uEntry[] {
   const normalized = (rawText || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  if (normalized.length > 5 * 1024 * 1024) {
-    throw new Error('Fichier playlist M3U trop volumineux (limite 5 Mo).');
+  if (normalized.length > 8 * 1024 * 1024) {
+    throw new Error('Fichier playlist M3U trop volumineux (limite 8 Mo).');
   }
 
   const lines = normalized.split('\n');
   const entries: ParsedM3uEntry[] = [];
+  const seenUrls = new Set<string>();
   let pendingExtInf: string | null = null;
   let pendingVlcGroup: string | null = null;
 
@@ -281,7 +392,6 @@ export function parseM3uPlaylistText(rawText: string, maxEntries = 600): ParsedM
       continue;
     }
 
-    // Stream URL line
     let safeUrl: URL;
     try {
       safeUrl = assertSafeHttpUrl(line);
@@ -291,19 +401,28 @@ export function parseM3uPlaylistText(rawText: string, maxEntries = 600): ParsedM
       continue;
     }
 
+    const dedupeKey = normalizeUrlDedupeKey(safeUrl);
+    if (seenUrls.has(dedupeKey)) {
+      pendingExtInf = null;
+      pendingVlcGroup = null;
+      continue;
+    }
+    seenUrls.add(dedupeKey);
+
     const extInf = pendingExtInf || '';
     pendingExtInf = null;
 
-    const commaIndex = extInf.lastIndexOf(',');
-    const rawDisplayName =
-      commaIndex >= 0 ? extInf.slice(commaIndex + 1) : safeUrl.hostname;
+    const rawDisplayName = extractDisplayNameFromExtInf(extInf) || safeUrl.hostname;
     const name = sanitizeText(rawDisplayName, 140) || safeUrl.hostname;
     const tvgId = extractExtInfAttr(extInf, 'tvg-id');
     const rawLogo = extractExtInfAttr(extInf, 'tvg-logo');
     let logoUrl: string | null = null;
     if (rawLogo) {
       try {
-        logoUrl = assertSafeHttpUrl(rawLogo).toString();
+        const parsedLogo = assertSafeHttpUrl(rawLogo);
+        if (parsedLogo.protocol === 'https:') {
+          logoUrl = parsedLogo.toString();
+        }
       } catch {
         logoUrl = null;
       }
@@ -312,18 +431,23 @@ export function parseM3uPlaylistText(rawText: string, maxEntries = 600): ParsedM
     const groupTitle = extractExtInfAttr(extInf, 'group-title') || pendingVlcGroup;
     pendingVlcGroup = null;
 
-    const language =
-      extractExtInfAttr(extInf, 'tvg-language') ||
-      (/(^|\b)(fr|french|français|francais)(\b|$)/i.test(`${name} ${extInf}`)
-        ? 'Français'
-        : 'Multilingue');
-    const country = extractExtInfAttr(extInf, 'tvg-country');
+    const country = extractExtInfAttr(extInf, 'tvg-country') || inferCountryFromTvgId(tvgId);
+    const language = inferLanguageLabel(name, extInf, country);
 
-    const hay = `${name} ${tvgId || ''} ${groupTitle || ''} ${safeUrl.hostname}`.toLowerCase();
+    const hay = `${name} ${tvgId || ''} ${safeUrl.hostname}`.toLowerCase();
+    const isExcluded = NON_CHRISTIAN_PATTERN.test(hay);
     let score = 0;
-    for (const kw of CHRISTIAN_KEYWORDS) {
-      if (hay.includes(kw)) score += 1;
+    if (!isExcluded) {
+      for (const kw of CHRISTIAN_KEYWORDS) {
+        if (hay.includes(kw)) score += 1;
+      }
+      if (/français/i.test(language)) score += 1;
+      if (safeUrl.protocol === 'https:') score += 1;
     }
+
+    const christianScoreWithoutBonus = isExcluded
+      ? 0
+      : CHRISTIAN_KEYWORDS.reduce((acc, kw) => (hay.includes(kw) ? acc + 1 : acc), 0);
 
     const suggestedCategory = inferCategory(name, groupTitle, language, country);
 
@@ -331,6 +455,7 @@ export function parseM3uPlaylistText(rawText: string, maxEntries = 600): ParsedM
       index: entries.length + 1,
       name,
       streamUrl: safeUrl.toString(),
+      httpProtocol: safeUrl.protocol === 'https:' ? 'https' : 'http',
       logoUrl,
       tvgId,
       groupTitle,
@@ -338,7 +463,7 @@ export function parseM3uPlaylistText(rawText: string, maxEntries = 600): ParsedM
       country,
       suggestedCategory,
       christianRelevanceScore: score,
-      isLikelyChristian: score > 0,
+      isLikelyChristian: !isExcluded && christianScoreWithoutBonus > 0,
       streamFormat: detectStreamFormat(safeUrl.toString()),
     });
   }
@@ -353,11 +478,11 @@ export async function fetchAndParseM3uUrl(playlistUrl: string): Promise<ParsedM3
   const response = await fetch(safeUrl.toString(), {
     method: 'GET',
     headers: {
-      'User-Agent': 'CharitasTV-Validator/1.0',
+      'User-Agent': 'CharitasTV-Validator/2.0',
       Accept: 'audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain, */*',
     },
     redirect: 'follow',
-    signal: AbortSignal.timeout(9000),
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!response.ok) {
@@ -377,11 +502,49 @@ export async function fetchAndParseM3uUrl(playlistUrl: string): Promise<ParsedM3
   return parseM3uPlaylistText(text);
 }
 
+function hasPermissiveCors(headers: Headers, requestOrigin = 'https://charitas.local'): boolean {
+  const acao = (headers.get('access-control-allow-origin') || '').trim();
+  if (!acao) return false;
+  return acao === '*' || acao === requestOrigin;
+}
+
+async function readBoundedBodyText(response: Response, limitBytes = 65536): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  let bytesRead = 0;
+  const chunks: Uint8Array[] = [];
+  try {
+    while (bytesRead < limitBytes) {
+      const { value, done } = await reader.read();
+      if (done || !value) break;
+      chunks.push(value);
+      bytesRead += value.byteLength;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function extractFirstHlsReference(manifestText: string): { uri: string; isVariantList: boolean } | null {
+  const lines = manifestText.replace(/\r\n/g, '\n').split('\n');
+  const isVariantList = /#EXT-X-STREAM-INF/i.test(manifestText);
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    return { uri: line, isVariantList };
+  }
+  return null;
+}
+
 /**
- * Probes a stream or embed URL safely without acting as an open proxy and without bypassing geo-blocks/DRM.
+ * Deeply probes a stream or embed URL safely (SSRF-guarded, no open proxy, no DRM/geo bypass).
+ * Verifies HTTPS compatibility, CORS headers for web HLS.js, manifest structure, nested variant playlist, and first video segment reachability.
  */
 export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult> {
   const checkedAt = new Date().toISOString();
+  const originHeader = 'https://charitas.local';
+
   let safeUrl: URL;
   try {
     safeUrl = assertSafeHttpUrl(rawUrl);
@@ -391,11 +554,28 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
       httpStatus: null,
       error: err instanceof Error ? err.message : 'URL de flux invalide.',
       detectedFormat: 'hls',
+      corsAllowed: false,
+      httpsCompatible: false,
+      segmentChecked: false,
       checkedAt,
     };
   }
 
   const detectedFormat = detectStreamFormat(safeUrl.toString());
+  const httpsCompatible = safeUrl.protocol === 'https:';
+
+  if (!httpsCompatible && detectedFormat !== 'embed') {
+    return {
+      status: 'incompatible',
+      httpStatus: null,
+      error: 'Flux HTTP non chiffré : bloqué sur navigateur HTTPS (Mixed Content). Utilisez une source HTTPS.',
+      detectedFormat,
+      corsAllowed: false,
+      httpsCompatible: false,
+      segmentChecked: false,
+      checkedAt,
+    };
+  }
 
   try {
     await assertSafeResolvedTarget(safeUrl);
@@ -403,8 +583,11 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
     return {
       status: 'unavailable',
       httpStatus: null,
-      error: err instanceof Error ? err.message : 'Domaine inaccessible.',
+      error: err instanceof Error ? err.message : 'Domaine inaccessible (DNS).',
       detectedFormat,
+      corsAllowed: false,
+      httpsCompatible,
+      segmentChecked: false,
       checkedAt,
     };
   }
@@ -426,6 +609,9 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
           httpStatus: res.status,
           error: `Flux vidéo intégré indisponible ou privé (HTTP ${res.status}).`,
           detectedFormat,
+          corsAllowed: true,
+          httpsCompatible: true,
+          segmentChecked: false,
           checkedAt,
         };
       }
@@ -434,30 +620,39 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
         httpStatus: res.status,
         error: null,
         detectedFormat,
+        corsAllowed: true,
+        httpsCompatible: true,
+        segmentChecked: true,
         checkedAt,
       };
     }
 
-    // For HLS / MP4 / streaming endpoints: bounded GET reading only initial manifest/bytes
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 7000);
-    let response: Response;
-    try {
-      response = await fetch(safeUrl.toString(), {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'CharitasTV-HealthMonitor/1.0',
-          Accept: 'application/vnd.apple.mpegurl, application/x-mpegurl, video/*, */*',
-        },
-        redirect: 'follow',
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    const response = await fetch(safeUrl.toString(), {
+      method: 'GET',
+      headers: {
+        Origin: originHeader,
+        'User-Agent': 'CharitasTV-HealthMonitor/2.0',
+        Accept: 'application/vnd.apple.mpegurl, application/x-mpegurl, video/*, */*',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(7000),
+    });
 
     if (response.url) {
       const redirectedUrl = assertSafeHttpUrl(response.url);
+      if (redirectedUrl.protocol !== 'https:') {
+        await response.body?.cancel().catch(() => {});
+        return {
+          status: 'incompatible',
+          httpStatus: response.status,
+          error: 'Redirection vers HTTP non sécurisé bloquée sur navigateur HTTPS.',
+          detectedFormat,
+          corsAllowed: false,
+          httpsCompatible: false,
+          segmentChecked: false,
+          checkedAt,
+        };
+      }
       await assertSafeResolvedTarget(redirectedUrl);
     }
 
@@ -468,6 +663,9 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
         httpStatus: response.status,
         error: `Diffusion restreinte ou géo-bloquée (HTTP ${response.status}) — aucun contournement autorisé.`,
         detectedFormat,
+        corsAllowed: false,
+        httpsCompatible,
+        segmentChecked: false,
         checkedAt,
       };
     }
@@ -479,30 +677,16 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
         httpStatus: response.status,
         error: `Le serveur de flux a répondu HTTP ${response.status}.`,
         detectedFormat,
+        corsAllowed: hasPermissiveCors(response.headers, originHeader),
+        httpsCompatible,
+        segmentChecked: false,
         checkedAt,
       };
     }
 
+    let corsAllowed = hasPermissiveCors(response.headers, originHeader);
     const contentType = (response.headers.get('content-type') || '').toLowerCase();
-
-    // Read small initial slice (up to 64 KB) to verify manifest / non-HTML stream payload
-    let snippet = '';
-    if (response.body) {
-      const reader = response.body.getReader();
-      let bytesRead = 0;
-      const chunks: Uint8Array[] = [];
-      try {
-        while (bytesRead < 65536) {
-          const { value, done } = await reader.read();
-          if (done || !value) break;
-          chunks.push(value);
-          bytesRead += value.byteLength;
-        }
-      } finally {
-        await reader.cancel().catch(() => {});
-      }
-      snippet = Buffer.concat(chunks).toString('utf8');
-    }
+    const snippet = await readBoundedBodyText(response, 65536);
 
     const looksHtml =
       contentType.includes('text/html') || /^\s*<!doctype html|^\s*<html/i.test(snippet);
@@ -512,6 +696,9 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
         httpStatus: response.status,
         error: 'L’URL renvoie une page web HTML et non un flux vidéo HLS/MP4 direct.',
         detectedFormat,
+        corsAllowed,
+        httpsCompatible,
+        segmentChecked: false,
         checkedAt,
       };
     }
@@ -522,35 +709,210 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
       );
     if (hasDrmKey) {
       return {
-        status: 'unavailable',
+        status: 'incompatible',
         httpStatus: response.status,
-        error: 'Flux protégé par DRM détecté — intégration non autorisée.',
+        error: 'Flux protégé par DRM détecté — incompatible lecteur ouvert.',
         detectedFormat,
+        corsAllowed,
+        httpsCompatible,
+        segmentChecked: false,
         checkedAt,
       };
     }
 
-    const isM3uManifest =
-      snippet.includes('#EXTM3U') ||
-      contentType.includes('mpegurl') ||
-      detectedFormat === 'hls';
-
-    if (detectedFormat === 'hls' && contentType.startsWith('text/plain') && !snippet.includes('#EXTM3U')) {
+    if (detectedFormat === 'mp4') {
+      if (!contentType.includes('video/') && !contentType.includes('octet-stream')) {
+        return {
+          status: 'incompatible',
+          httpStatus: response.status,
+          error: `Type MIME vidéo inattendu (${contentType || 'inconnu'}).`,
+          detectedFormat,
+          corsAllowed,
+          httpsCompatible,
+          segmentChecked: false,
+          checkedAt,
+        };
+      }
       return {
-        status: 'unavailable',
+        status: 'operational',
         httpStatus: response.status,
-        error: 'Manifeste HLS #EXTM3U invalide ou corrompu.',
+        error: null,
         detectedFormat,
+        corsAllowed,
+        httpsCompatible,
+        segmentChecked: true,
         checkedAt,
       };
     }
 
-    if (!isM3uManifest && detectedFormat === 'mp4' && !contentType.includes('video/') && !contentType.includes('octet-stream')) {
+    // HLS Validation: require actual #EXTM3U header
+    if (!snippet.includes('#EXTM3U')) {
       return {
         status: 'unavailable',
         httpStatus: response.status,
-        error: `Type MIME inattendu pour la vidéo (${contentType || 'inconnu'}).`,
+        error: 'Manifeste HLS invalide : balise #EXTM3U absente.',
         detectedFormat,
+        corsAllowed,
+        httpsCompatible,
+        segmentChecked: false,
+        checkedAt,
+      };
+    }
+
+    // Deep check child playlist and first media segment (never stop at HTTP 200 master manifest!)
+    let currentManifestText = snippet;
+    let currentBaseUrl = response.url || safeUrl.toString();
+    let ref = extractFirstHlsReference(currentManifestText);
+
+    if (!ref) {
+      return {
+        status: 'unavailable',
+        httpStatus: response.status,
+        error: 'Manifeste HLS vide (aucun flux ni segment vidéo actif).',
+        detectedFormat,
+        corsAllowed,
+        httpsCompatible,
+        segmentChecked: false,
+        checkedAt,
+      };
+    }
+
+    // Follow master -> variant media playlist if needed (at most 2 hops)
+    if (ref.isVariantList || /\.m3u8(\?.*)?$/i.test(ref.uri)) {
+      const variantUrl = assertSafeHttpUrl(new URL(ref.uri, currentBaseUrl).toString());
+      if (variantUrl.protocol !== 'https:') {
+        return {
+          status: 'incompatible',
+          httpStatus: response.status,
+          error: 'Variante HLS en HTTP non chiffré détectée (Mixed Content).',
+          detectedFormat,
+          corsAllowed,
+          httpsCompatible: false,
+          segmentChecked: false,
+          checkedAt,
+        };
+      }
+      await assertSafeResolvedTarget(variantUrl);
+
+      const variantRes = await fetch(variantUrl.toString(), {
+        method: 'GET',
+        headers: {
+          Origin: originHeader,
+          'User-Agent': 'CharitasTV-HealthMonitor/2.0',
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(6500),
+      });
+      corsAllowed = corsAllowed || hasPermissiveCors(variantRes.headers, originHeader);
+      if (!variantRes.ok) {
+        await variantRes.body?.cancel().catch(() => {});
+        return {
+          status: 'unavailable',
+          httpStatus: variantRes.status,
+          error: `Sous-playlist vidéo inaccessible (HTTP ${variantRes.status}).`,
+          detectedFormat,
+          corsAllowed,
+          httpsCompatible,
+          segmentChecked: false,
+          checkedAt,
+        };
+      }
+      currentManifestText = await readBoundedBodyText(variantRes, 65536);
+      currentBaseUrl = variantRes.url || variantUrl.toString();
+      if (!currentManifestText.includes('#EXTM3U')) {
+        return {
+          status: 'unavailable',
+          httpStatus: variantRes.status,
+          error: 'Sous-playlist HLS invalide (#EXTM3U absent).',
+          detectedFormat,
+          corsAllowed,
+          httpsCompatible,
+          segmentChecked: false,
+          checkedAt,
+        };
+      }
+      ref = extractFirstHlsReference(currentManifestText);
+      if (!ref) {
+        return {
+          status: 'unavailable',
+          httpStatus: variantRes.status,
+          error: 'Aucun segment vidéo actif dans la playlist.',
+          detectedFormat,
+          corsAllowed,
+          httpsCompatible,
+          segmentChecked: false,
+          checkedAt,
+        };
+      }
+    }
+
+    // Verify first actual media segment (.ts / .m4s / .aac) reachability and CORS
+    const segUrl = assertSafeHttpUrl(new URL(ref.uri, currentBaseUrl).toString());
+    if (segUrl.protocol !== 'https:') {
+      return {
+        status: 'incompatible',
+        httpStatus: response.status,
+        error: 'Segments vidéo en HTTP non chiffré bloqués sur navigateur HTTPS.',
+        detectedFormat,
+        corsAllowed,
+        httpsCompatible: false,
+        segmentChecked: true,
+        checkedAt,
+      };
+    }
+    await assertSafeResolvedTarget(segUrl);
+
+    let segRes = await fetch(segUrl.toString(), {
+      method: 'HEAD',
+      headers: {
+        Origin: originHeader,
+        'User-Agent': 'CharitasTV-HealthMonitor/2.0',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(6000),
+    });
+    if (segRes.status === 405 || segRes.status === 501) {
+      await segRes.body?.cancel().catch(() => {});
+      segRes = await fetch(segUrl.toString(), {
+        method: 'GET',
+        headers: {
+          Origin: originHeader,
+          Range: 'bytes=0-1023',
+          'User-Agent': 'CharitasTV-HealthMonitor/2.0',
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(6000),
+      });
+    }
+    const segCors = hasPermissiveCors(segRes.headers, originHeader);
+    corsAllowed = corsAllowed && segCors ? true : corsAllowed || segCors;
+    const segOk = segRes.ok;
+    const segStatus = segRes.status;
+    await segRes.body?.cancel().catch(() => {});
+
+    if (!segOk) {
+      return {
+        status: 'unavailable',
+        httpStatus: segStatus,
+        error: `Segment vidéo inaccessible (HTTP ${segStatus}).`,
+        detectedFormat,
+        corsAllowed,
+        httpsCompatible,
+        segmentChecked: true,
+        checkedAt,
+      };
+    }
+
+    if (!corsAllowed) {
+      return {
+        status: 'incompatible',
+        httpStatus: response.status,
+        error:
+          'En-tête CORS (Access-Control-Allow-Origin) absent sur le flux : illisible par le lecteur web HLS.js.',
+        detectedFormat,
+        corsAllowed: false,
+        httpsCompatible,
+        segmentChecked: true,
         checkedAt,
       };
     }
@@ -560,26 +922,37 @@ export async function probeStreamUrl(rawUrl: string): Promise<StreamProbeResult>
       httpStatus: response.status,
       error: null,
       detectedFormat,
+      corsAllowed: true,
+      httpsCompatible: true,
+      segmentChecked: true,
       checkedAt,
     };
   } catch (err: unknown) {
-    const isAbort = err instanceof Error && err.name === 'AbortError';
+    const isAbort = err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
     return {
       status: 'unavailable',
       httpStatus: null,
       error: isAbort
-        ? 'Délai dépassé lors de la vérification du flux (timeout 7s).'
+        ? 'Délai dépassé lors de la vérification du flux et des segments (timeout).'
         : err instanceof Error
           ? err.message
           : 'Erreur réseau lors du test de disponibilité.',
       detectedFormat,
+      corsAllowed: false,
+      httpsCompatible,
+      segmentChecked: false,
       checkedAt,
     };
   }
 }
 
-export function isValidTvCategory(value: string): value is TvCategory {
-  return (TV_CATEGORIES as readonly string[]).includes(value);
+export function isValidTvCategory(value: string): boolean {
+  if ((TV_CATEGORIES as readonly string[]).includes(value)) return true;
+  const normalized = normalizeTvCategory(value);
+  return value === 'TV chrétiennes africaines' ||
+    value === 'TV chrétiennes francophones' ||
+    value === 'TV chrétiennes internationales' ||
+    normalized === value;
 }
 
 let healthSweepRunning = false;
@@ -631,4 +1004,4 @@ export function startPeriodicStreamHealthMonitor(intervalMs = 15 * 60 * 1000): (
   return () => clearInterval(timer);
 }
 
-export { IPTV_ORG_RELIGIOUS_PLAYLIST_URL };
+export { IPTV_ORG_RELIGIOUS_PLAYLIST_URL, normalizeTvCategory };

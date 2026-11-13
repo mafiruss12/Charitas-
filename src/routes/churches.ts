@@ -12,10 +12,13 @@ import {
   eventRegistrations,
   interventionReports,
   invitations,
+  mediaLibrary,
   notifications,
   pollOptions,
+  readingPlans,
   socialPosts,
   socialStories,
+  spiritualContents,
   testimonies,
   users,
   visitors,
@@ -568,6 +571,219 @@ churchesRouter.post('/public/visitor-contact', async (req, res) => {
   } catch (error) {
     console.error('Public visitor contact error:', error);
     return res.status(500).json({ error: 'Impossible d’enregistrer votre demande pour le moment.' });
+  }
+});
+
+churchesRouter.get('/public/spiritual/daily', async (req, res) => {
+  try {
+    await ensureStarterChurches();
+    const requestedChurchId = req.query.churchId ? Number(req.query.churchId) : null;
+
+    const activeChurches = await db
+      .select({ id: churches.id, name: churches.name })
+      .from(churches)
+      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')))
+      .orderBy(asc(churches.id));
+
+    const targetChurch =
+      (requestedChurchId ? activeChurches.find((c) => c.id === requestedChurchId) : undefined) ||
+      activeChurches[0];
+
+    if (!targetChurch) {
+      return res.json({
+        churchId: 0,
+        churchName: '',
+        dailyVerse: null,
+        meditations: [],
+        readingPlans: [],
+      });
+    }
+
+    const data = await withTenantContext({ churchId: targetChurch.id, isSuperAdmin: true }, async (tx) => {
+      const [contents, plans] = await Promise.all([
+        tx
+          .select({
+            id: spiritualContents.id,
+            churchId: spiritualContents.churchId,
+            kind: spiritualContents.kind,
+            title: spiritualContents.title,
+            scriptureRef: spiritualContents.scriptureRef,
+            content: spiritualContents.content,
+            mediaUrl: spiritualContents.mediaUrl,
+            durationLabel: spiritualContents.durationLabel,
+            publishedDate: spiritualContents.publishedDate,
+          })
+          .from(spiritualContents)
+          .where(eq(spiritualContents.churchId, targetChurch.id))
+          .orderBy(desc(spiritualContents.createdAt))
+          .limit(30),
+        tx
+          .select({
+            id: readingPlans.id,
+            churchId: readingPlans.churchId,
+            title: readingPlans.title,
+            description: readingPlans.description,
+            days: readingPlans.days,
+            createdAt: readingPlans.createdAt,
+          })
+          .from(readingPlans)
+          .where(eq(readingPlans.churchId, targetChurch.id))
+          .orderBy(desc(readingPlans.createdAt))
+          .limit(15),
+      ]);
+
+      return {
+        dailyVerse: contents.find((c) => c.kind === 'daily_verse') || null,
+        meditations: contents.filter((c) => c.kind === 'meditation'),
+        sermons: contents.filter((c) => c.kind === 'sermon'),
+        podcasts: contents.filter((c) => c.kind === 'podcast'),
+        readingPlans: plans,
+      };
+    });
+
+    return res.json({
+      churchId: targetChurch.id,
+      churchName: targetChurch.name,
+      ...data,
+    });
+  } catch (error) {
+    console.error('Public spiritual daily error:', error);
+    return res.status(500).json({ error: 'Impossible de charger les ressources spirituelles publiques.' });
+  }
+});
+
+churchesRouter.get('/public/media', async (req, res) => {
+  try {
+    await ensureStarterChurches();
+    const requestedChurchId = req.query.churchId ? Number(req.query.churchId) : null;
+
+    const activeChurches = await db
+      .select({ id: churches.id, name: churches.name })
+      .from(churches)
+      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')))
+      .orderBy(asc(churches.id));
+
+    const targetChurch =
+      (requestedChurchId ? activeChurches.find((c) => c.id === requestedChurchId) : undefined) ||
+      activeChurches[0];
+
+    if (!targetChurch) {
+      return res.json({ churchId: 0, churchName: '', media: [] });
+    }
+
+    const media = await withTenantContext({ churchId: targetChurch.id, isSuperAdmin: true }, async (tx) =>
+      tx
+        .select({
+          id: mediaLibrary.id,
+          churchId: mediaLibrary.churchId,
+          title: mediaLibrary.title,
+          description: mediaLibrary.description,
+          mediaType: mediaLibrary.mediaType,
+          mediaUrl: mediaLibrary.mediaUrl,
+          thumbnailUrl: mediaLibrary.thumbnailUrl,
+          speakerName: mediaLibrary.speakerName,
+          durationLabel: mediaLibrary.durationLabel,
+          publishedDate: mediaLibrary.publishedDate,
+        })
+        .from(mediaLibrary)
+        .where(eq(mediaLibrary.churchId, targetChurch.id))
+        .orderBy(desc(mediaLibrary.createdAt))
+        .limit(40)
+    );
+
+    return res.json({
+      churchId: targetChurch.id,
+      churchName: targetChurch.name,
+      media,
+    });
+  } catch (error) {
+    console.error('Public media error:', error);
+    return res.status(500).json({ error: 'Impossible de charger la médiathèque publique.' });
+  }
+});
+
+churchesRouter.get('/public/solidarity', async (req, res) => {
+  try {
+    await ensureStarterChurches();
+    const requestedChurchId = req.query.churchId ? Number(req.query.churchId) : null;
+
+    const activeChurches = await db
+      .select({ id: churches.id, name: churches.name })
+      .from(churches)
+      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')))
+      .orderBy(asc(churches.id));
+
+    const targetChurch =
+      (requestedChurchId ? activeChurches.find((c) => c.id === requestedChurchId) : undefined) ||
+      activeChurches[0];
+
+    if (!targetChurch) {
+      return res.json({
+        churchId: 0,
+        churchName: '',
+        campaigns: [],
+        reports: [],
+        volunteerMissions: [],
+      });
+    }
+
+    const data = await withTenantContext({ churchId: targetChurch.id, isSuperAdmin: true }, async (tx) => {
+      const [campaigns, reports, missions] = await Promise.all([
+        tx
+          .select({
+            id: donationCampaigns.id,
+            churchId: donationCampaigns.churchId,
+            title: donationCampaigns.title,
+            description: donationCampaigns.description,
+            fundCategory: donationCampaigns.fundCategory,
+            goalAmount: donationCampaigns.goalAmount,
+            collectedAmount: donationCampaigns.collectedAmount,
+            currency: donationCampaigns.currency,
+          })
+          .from(donationCampaigns)
+          .where(and(eq(donationCampaigns.churchId, targetChurch.id), eq(donationCampaigns.status, 'active')))
+          .orderBy(desc(donationCampaigns.createdAt))
+          .limit(12),
+        tx
+          .select({
+            id: interventionReports.id,
+            churchId: interventionReports.churchId,
+            title: interventionReports.title,
+            summary: interventionReports.summary,
+            beneficiariesHelpedCount: interventionReports.beneficiariesHelpedCount,
+            totalAmountSpent: interventionReports.totalAmountSpent,
+            proofImageUrl: interventionReports.proofImageUrl,
+            publishedDate: interventionReports.publishedDate,
+          })
+          .from(interventionReports)
+          .where(eq(interventionReports.churchId, targetChurch.id))
+          .orderBy(desc(interventionReports.publishedDate))
+          .limit(15),
+        tx
+          .select({
+            id: volunteerAssignments.id,
+            missionTitle: volunteerAssignments.missionTitle,
+            roleDescription: volunteerAssignments.roleDescription,
+            scheduledDate: volunteerAssignments.scheduledDate,
+            status: volunteerAssignments.status,
+          })
+          .from(volunteerAssignments)
+          .where(eq(volunteerAssignments.churchId, targetChurch.id))
+          .orderBy(desc(volunteerAssignments.createdAt))
+          .limit(20),
+      ]);
+
+      return { campaigns, reports, volunteerMissions: missions };
+    });
+
+    return res.json({
+      churchId: targetChurch.id,
+      churchName: targetChurch.name,
+      ...data,
+    });
+  } catch (error) {
+    console.error('Public solidarity error:', error);
+    return res.status(500).json({ error: 'Impossible de charger les actions de solidarité publiques.' });
   }
 });
 

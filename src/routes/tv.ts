@@ -16,6 +16,7 @@ import {
   detectStreamFormat,
   fetchAndParseM3uUrl,
   isValidTvCategory,
+  normalizeTvCategory,
   parseM3uPlaylistText,
   probeStreamUrl,
   runChurchChannelsHealthCheck,
@@ -101,8 +102,10 @@ tvRouter.get('/public/tv/catalog', async (req, res) => {
           )
           .orderBy(desc(tvChannels.isRecommended), asc(tvChannels.name));
 
+        const normalizedCategoryFilter =
+          categoryFilter && categoryFilter !== 'all' ? normalizeTvCategory(categoryFilter) : '';
         const filteredChannels = validChannels.filter((ch) => {
-          if (categoryFilter && categoryFilter !== 'all' && ch.category !== categoryFilter) {
+          if (normalizedCategoryFilter && normalizeTvCategory(ch.category) !== normalizedCategoryFilter) {
             return false;
           }
           if (searchFilter) {
@@ -509,14 +512,27 @@ tvRouter.post(
             .where(eq(tvChannels.churchId, churchId))
       );
 
-      const urlSet = new Set(existingUrls.map((u) => u.streamUrl));
+      const urlSet = new Set(existingUrls.map((u) => u.streamUrl.trim().toLowerCase()));
       const filtered = onlyLikelyChristian
         ? parsedEntries.filter((e) => e.isLikelyChristian)
         : parsedEntries;
 
-      const entries = filtered.map((e) => ({
+      const sorted = [...filtered].sort((a, b) => {
+        const rank = (e: (typeof filtered)[number]) => {
+          let r = e.christianRelevanceScore * 10;
+          if (e.httpProtocol === 'https') r += 25;
+          if (/français/i.test(e.language)) r += 30;
+          if (e.suggestedCategory === 'Chaînes chrétiennes africaines') r += 20;
+          if (e.suggestedCategory === 'Gospel et louange') r += 10;
+          return r;
+        };
+        return rank(b) - rank(a);
+      });
+
+      const entries = sorted.map((e, idx) => ({
         ...e,
-        alreadyAdded: urlSet.has(e.streamUrl),
+        index: idx + 1,
+        alreadyAdded: urlSet.has(e.streamUrl.trim().toLowerCase()),
       }));
 
       return res.json({
@@ -557,7 +573,34 @@ tvRouter.post(
           .json({ error: 'Sélectionnez entre 1 et 25 chaînes à la fois pour validation.' });
       }
 
-      const createdChannels = [];
+      const existingRows = await withTenantContext(
+        { churchId, userId, isSuperAdmin: req.authUser!.isPlatformSuperAdmin },
+        async (tx) =>
+          tx
+            .select({ streamUrl: tvChannels.streamUrl })
+            .from(tvChannels)
+            .where(eq(tvChannels.churchId, churchId))
+      );
+      const seenStreamUrls = new Set(existingRows.map((r) => r.streamUrl.trim().toLowerCase()));
+
+      const validatedInputs: Array<{
+        name: string;
+        safeStreamUrl: string;
+        safeLogoUrl: string | null;
+        category: string;
+        language: string;
+        country: string | null;
+        sourceOrigin: string;
+        rightsVerified: boolean;
+        isValidated: boolean;
+        isActive: boolean;
+        isRecommended: boolean;
+        tvgId: string | null;
+        description: string | null;
+        currentProgram: string | null;
+        rightsHolder: string | null;
+        rightsNotes: string | null;
+      }> = [];
 
       for (const item of rawItems) {
         const name = cleanOptionalText(item.name, 140);
@@ -577,10 +620,19 @@ tvRouter.post(
           });
         }
 
+        const dedupeKey = safeStreamUrl.trim().toLowerCase();
+        if (seenStreamUrls.has(dedupeKey)) {
+          if (rawItems.length === 1) {
+            return res.status(409).json({ error: 'Cette URL de flux est déjà enregistrée dans votre catalogue.' });
+          }
+          continue;
+        }
+        seenStreamUrls.add(dedupeKey);
+
         const category =
           typeof item.category === 'string' && isValidTvCategory(item.category)
-            ? item.category
-            : 'TV chrétiennes francophones';
+            ? normalizeTvCategory(item.category)
+            : 'Chaînes chrétiennes francophones';
         const language = cleanOptionalText(item.language, 60) || 'Français';
         const country = cleanOptionalText(item.country, 80);
         const sourceOrigin =
@@ -592,18 +644,47 @@ tvRouter.post(
         const isActive = item.isActive !== false;
         const isRecommended = Boolean(item.isRecommended);
 
-        let streamStatus: 'operational' | 'unavailable' | 'pending_check' = 'pending_check';
-        let httpStatus: number | null = null;
-        let lastCheckError: string | null = null;
-        let lastCheckedAt: Date | null = null;
+        validatedInputs.push({
+          name,
+          safeStreamUrl,
+          safeLogoUrl,
+          category,
+          language,
+          country,
+          sourceOrigin,
+          rightsVerified,
+          isValidated,
+          isActive,
+          isRecommended,
+          tvgId: cleanOptionalText(item.tvgId, 120),
+          description: cleanOptionalText(item.description, 600),
+          currentProgram: cleanOptionalText(item.currentProgram, 200),
+          rightsHolder: cleanOptionalText(item.rightsHolder, 180),
+          rightsNotes: cleanOptionalText(item.rightsNotes, 500),
+        });
+      }
 
-        if (testImmediately && rawItems.length <= 10) {
-          const probe = await probeStreamUrl(safeStreamUrl);
-          streamStatus = probe.status;
-          httpStatus = probe.httpStatus;
-          lastCheckError = probe.error;
-          lastCheckedAt = new Date(probe.checkedAt);
+      if (validatedInputs.length === 0) {
+        return res.status(409).json({ error: 'Toutes les chaînes sélectionnées existent déjà dans le catalogue.' });
+      }
+
+      const probesByUrl = new Map<string, Awaited<ReturnType<typeof probeStreamUrl>>>();
+      if (testImmediately) {
+        const chunkSize = 5;
+        for (let i = 0; i < validatedInputs.length; i += chunkSize) {
+          const slice = validatedInputs.slice(i, i + chunkSize);
+          const probes = await Promise.all(slice.map((s) => probeStreamUrl(s.safeStreamUrl)));
+          slice.forEach((s, idx) => probesByUrl.set(s.safeStreamUrl, probes[idx]));
         }
+      }
+
+      const createdChannels = [];
+      for (const item of validatedInputs) {
+        const probe = probesByUrl.get(item.safeStreamUrl);
+        const streamStatus = probe ? probe.status : 'pending_check';
+        const httpStatus = probe ? probe.httpStatus : null;
+        const lastCheckError = probe ? probe.error : null;
+        const lastCheckedAt = probe ? new Date(probe.checkedAt) : null;
 
         const [inserted] = await withTenantContext(
           { churchId, userId, isSuperAdmin: req.authUser!.isPlatformSuperAdmin },
@@ -612,23 +693,23 @@ tvRouter.post(
               .insert(tvChannels)
               .values({
                 churchId,
-                name,
-                category,
-                language,
-                country,
-                logoUrl: safeLogoUrl,
-                streamUrl: safeStreamUrl,
-                streamFormat: detectStreamFormat(safeStreamUrl),
-                sourceOrigin,
-                tvgId: cleanOptionalText(item.tvgId, 120),
-                description: cleanOptionalText(item.description, 600),
-                currentProgram: cleanOptionalText(item.currentProgram, 200),
-                isRecommended,
-                isValidated,
-                isActive,
-                rightsVerified,
-                rightsHolder: cleanOptionalText(item.rightsHolder, 180),
-                rightsNotes: cleanOptionalText(item.rightsNotes, 500),
+                name: item.name,
+                category: item.category,
+                language: item.language,
+                country: item.country,
+                logoUrl: item.safeLogoUrl,
+                streamUrl: item.safeStreamUrl,
+                streamFormat: detectStreamFormat(item.safeStreamUrl),
+                sourceOrigin: item.sourceOrigin,
+                tvgId: item.tvgId,
+                description: item.description,
+                currentProgram: item.currentProgram,
+                isRecommended: item.isRecommended,
+                isValidated: item.isValidated,
+                isActive: item.isActive,
+                rightsVerified: item.rightsVerified,
+                rightsHolder: item.rightsHolder,
+                rightsNotes: item.rightsNotes,
                 streamStatus,
                 httpStatus,
                 lastCheckError,
@@ -740,7 +821,7 @@ tvRouter.patch(
               name: cleanOptionalText(b.name, 140) || existing.name,
               category:
                 typeof b.category === 'string' && isValidTvCategory(b.category)
-                  ? b.category
+                  ? normalizeTvCategory(b.category)
                   : existing.category,
               language: cleanOptionalText(b.language, 60) || existing.language,
               country: b.country !== undefined ? cleanOptionalText(b.country, 80) : existing.country,
@@ -865,12 +946,69 @@ tvRouter.post(
       return res.json({
         checkedCount: results.length,
         operationalCount: results.filter((r) => r.status === 'operational').length,
+        incompatibleCount: results.filter((r) => r.status === 'incompatible').length,
         unavailableCount: results.filter((r) => r.status === 'unavailable').length,
         results,
       });
     } catch (error) {
       console.error('Batch check TV streams error:', error);
       return res.status(500).json({ error: 'Erreur lors de la vérification globale des flux.' });
+    }
+  }
+);
+
+tvRouter.post(
+  '/churches/:churchId/tv/admin/channels/:channelId/playback-report',
+  requireAuth,
+  requireChurchPermission('streams.manage'),
+  async (req: AuthRequest, res) => {
+    try {
+      const churchId = req.tenant!.churchId;
+      const userId = req.authUser!.id;
+      const channelId = Number(req.params.channelId);
+
+      if (!Number.isInteger(channelId) || channelId <= 0) {
+        return res.status(400).json({ error: 'Identifiant de chaîne invalide.' });
+      }
+
+      const b = req.body ?? {};
+      const allowedStatuses = new Set(['operational', 'incompatible', 'unavailable']);
+      if (typeof b.status !== 'string' || !allowedStatuses.has(b.status)) {
+        return res.status(400).json({ error: 'Statut de lecture invalide.' });
+      }
+
+      const reportStatus = b.status as 'operational' | 'incompatible' | 'unavailable';
+      const detail =
+        reportStatus === 'operational'
+          ? null
+          : cleanOptionalText(b.error, 400) ||
+            (reportStatus === 'incompatible'
+              ? 'Échec de décodage ou blocage CORS côté lecteur web.'
+              : 'Flux inaccessible depuis le lecteur navigateur.');
+
+      const [updated] = await withTenantContext(
+        { churchId, userId, isSuperAdmin: req.authUser!.isPlatformSuperAdmin },
+        async (tx) =>
+          tx
+            .update(tvChannels)
+            .set({
+              streamStatus: reportStatus,
+              lastCheckError: detail,
+              lastCheckedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(and(eq(tvChannels.id, channelId), eq(tvChannels.churchId, churchId)))
+            .returning()
+      );
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Chaîne introuvable.' });
+      }
+
+      return res.json({ channel: updated });
+    } catch (error) {
+      console.error('Playback report TV error:', error);
+      return res.status(500).json({ error: 'Erreur lors de l’enregistrement du diagnostic lecteur.' });
     }
   }
 );

@@ -9,6 +9,7 @@ import {
   Radio,
   RefreshCw,
   Settings2,
+  SkipForward,
   Volume2,
   VolumeX,
   Wifi,
@@ -17,12 +18,16 @@ import { parseVideoMedia } from '../../lib/media';
 import { ResilientImage } from '../ResilientImage';
 
 export interface PlayerSourceMeta {
+  id?: number | string;
   title: string;
   subtitle?: string | null;
   logoUrl?: string | null;
   streamUrl: string;
   streamFormat?: 'hls' | 'mp4' | 'embed' | string;
   isLive?: boolean;
+  country?: string | null;
+  language?: string | null;
+  category?: string | null;
 }
 
 interface QualityLevel {
@@ -35,7 +40,11 @@ interface QualityLevel {
 interface HlsVideoPlayerProps {
   source: PlayerSourceMeta;
   initialPositionSeconds?: number;
+  autoPlayMuted?: boolean;
   onProgress?: (positionSeconds: number, durationSeconds: number) => void;
+  onPlaybackReady?: (info: { streamUrl: string; codecInfo?: string }) => void;
+  onPlaybackFailed?: (reason: string, kind: 'unavailable' | 'incompatible') => void;
+  onNextChannel?: () => void;
   actionsSlot?: React.ReactNode;
 }
 
@@ -54,23 +63,34 @@ function formatSeconds(sec: number): string {
 export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
   source,
   initialPositionSeconds = 0,
+  autoPlayMuted = true,
   onProgress,
+  onPlaybackReady,
+  onPlaybackFailed,
+  onNextChannel,
   actionsSlot,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const appliedInitialSeekRef = useRef(false);
+  const hasUserUnmutedRef = useRef(!autoPlayMuted);
+  const onPlaybackReadyRef = useRef(onPlaybackReady);
+  const onPlaybackFailedRef = useRef(onPlaybackFailed);
+
+  onPlaybackReadyRef.current = onPlaybackReady;
+  onPlaybackFailedRef.current = onPlaybackFailed;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(autoPlayMuted);
   const [volume, setVolume] = useState(0.85);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [connectionLabel, setConnectionLabel] = useState<string>('Connexion au flux...');
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [connectionLabel, setConnectionLabel] = useState<string>('Chargement de la chaîne...');
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
-  const [selectedLevel, setSelectedLevel] = useState<number>(-1); // -1 = Auto
+  const [selectedLevel, setSelectedLevel] = useState<number>(-1);
   const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -85,17 +105,6 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
       /format=m3u8/i.test(source.streamUrl));
 
   useEffect(() => {
-    appliedInitialSeekRef.current = false;
-    setErrorMsg(null);
-    setQualityLevels([]);
-    setSelectedLevel(-1);
-    setCurrentTime(0);
-    setDuration(0);
-    setIsBuffering(!isEmbed);
-    setConnectionLabel(isEmbed ? 'Lecteur intégré prêt' : 'Connexion au flux...');
-  }, [source.streamUrl, isEmbed, reloadNonce]);
-
-  useEffect(() => {
     const onFsChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
@@ -104,18 +113,82 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
   }, []);
 
   useEffect(() => {
-    if (isEmbed) return;
+    appliedInitialSeekRef.current = false;
+    setErrorMsg(null);
+    setErrorDetail(null);
+    setQualityLevels([]);
+    setSelectedLevel(-1);
+    setQualityMenuOpen(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+    setIsBuffering(!isEmbed);
+    setConnectionLabel(isEmbed ? 'Lecture en cours.' : 'Chargement de la chaîne...');
+  }, [source.streamUrl, isEmbed, reloadNonce]);
+
+  useEffect(() => {
+    if (isEmbed) {
+      onPlaybackReadyRef.current?.({ streamUrl: source.streamUrl });
+      return;
+    }
+
     const video = videoRef.current;
     if (!video) return;
 
+    // 1. Clean teardown of any previous stream so no two streams can ever play concurrently
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+
+    // Mixed content protection check before attempting HTTPS->HTTP load
+    if (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      source.streamUrl.startsWith('http://')
+    ) {
+      const msg = 'Impossible de lire cette chaîne.';
+      const detail =
+        'Ce flux utilise HTTP non sécurisé et est bloqué par la sécurité HTTPS du navigateur.';
+      setIsBuffering(false);
+      setIsPlaying(false);
+      setErrorMsg(msg);
+      setErrorDetail(detail);
+      setConnectionLabel(msg);
+      onPlaybackFailedRef.current?.(detail, 'incompatible');
+      return;
+    }
 
     let cancelled = false;
+    let playbackConfirmed = false;
+    let networkRetries = 0;
+    let mediaRecoverAttempts = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const shouldStartMuted = !hasUserUnmutedRef.current;
     video.volume = volume;
-    video.muted = isMuted;
+    video.muted = shouldStartMuted;
+    setIsMuted(shouldStartMuted);
+
+    const attemptAutoPlay = async () => {
+      if (cancelled) return;
+      try {
+        await video.play();
+      } catch {
+        // Browser policy blocked unmuted autoplay: fall back to muted autoplay cleanly
+        if (cancelled) return;
+        video.muted = true;
+        setIsMuted(true);
+        try {
+          await video.play();
+        } catch {
+          // User interaction will still play cleanly on tap
+        }
+      }
+    };
 
     const tryInitialSeek = () => {
       if (
@@ -129,45 +202,78 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
       }
     };
 
+    const watchdogTimer = setTimeout(() => {
+      if (!cancelled && !playbackConfirmed) {
+        setIsBuffering(false);
+        setIsPlaying(false);
+        setErrorMsg('Cette chaîne est temporairement indisponible.');
+        setErrorDetail(
+          'Le flux met trop de temps à répondre (délai de connexion dépassé). Essayez une autre chaîne ou réessayez.'
+        );
+        setConnectionLabel('Cette chaîne est temporairement indisponible.');
+        onPlaybackFailedRef.current?.(
+          'Délai dépassé lors de la connexion au flux vidéo.',
+          'unavailable'
+        );
+      }
+    }, 13000);
+
+    const handleLoadStart = () => {
+      if (cancelled) return;
+      setConnectionLabel('Connexion au flux...');
+    };
+
     const handleLoadedMeta = () => {
       if (cancelled) return;
       if (Number.isFinite(video.duration) && video.duration > 0) {
         setDuration(video.duration);
       }
       tryInitialSeek();
-      setIsBuffering(false);
-      setConnectionLabel(source.isLive ? 'En direct' : 'Flux prêt');
+      setConnectionLabel('Connexion au flux...');
     };
 
     const handleCanPlay = () => {
       if (cancelled) return;
       setIsBuffering(false);
       setErrorMsg(null);
-      setConnectionLabel(source.isLive ? 'Flux connecté' : 'Prêt à lire');
+      setErrorDetail(null);
+      void attemptAutoPlay();
     };
 
     const handleWaiting = () => {
-      if (cancelled) return;
+      if (cancelled || errorMsg) return;
       setIsBuffering(true);
-      setConnectionLabel('Mise en mémoire tampon...');
+      setConnectionLabel('Connexion au flux...');
     };
 
     const handlePlaying = () => {
       if (cancelled) return;
+      playbackConfirmed = true;
       setIsPlaying(true);
       setIsBuffering(false);
       setErrorMsg(null);
-      setConnectionLabel(source.isLive ? 'En direct' : 'Lecture en cours');
+      setErrorDetail(null);
+      setConnectionLabel('Lecture en cours.');
+      onPlaybackReadyRef.current?.({ streamUrl: source.streamUrl });
     };
 
     const handlePause = () => {
       if (cancelled) return;
       setIsPlaying(false);
-      setConnectionLabel('En pause');
+      if (!errorMsg) {
+        setConnectionLabel('Lecture en pause.');
+      }
     };
 
     const handleTimeUpdate = () => {
       if (cancelled) return;
+      if ((video.currentTime || 0) > 0.1 && !playbackConfirmed) {
+        playbackConfirmed = true;
+        setIsBuffering(false);
+        setIsPlaying(!video.paused);
+        setConnectionLabel('Lecture en cours.');
+        onPlaybackReadyRef.current?.({ streamUrl: source.streamUrl });
+      }
       setCurrentTime(video.currentTime || 0);
       if (Number.isFinite(video.duration) && video.duration > 0) {
         setDuration(video.duration);
@@ -178,12 +284,15 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
       if (cancelled) return;
       setIsBuffering(false);
       setIsPlaying(false);
-      setConnectionLabel('Flux indisponible');
-      setErrorMsg(
-        'Le flux vidéo est momentanément inaccessible ou incompatible avec ce navigateur.'
+      setErrorMsg('Impossible de lire cette chaîne.');
+      setErrorDetail(
+        'Le navigateur n’a pas pu décoder ce flux vidéo ou la source est inaccessible.'
       );
+      setConnectionLabel('Impossible de lire cette chaîne.');
+      onPlaybackFailedRef.current?.('Erreur native du lecteur vidéo HTML5.', 'incompatible');
     };
 
+    video.addEventListener('loadstart', handleLoadStart);
     video.addEventListener('loadedmetadata', handleLoadedMeta);
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('waiting', handleWaiting);
@@ -198,8 +307,15 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
         lowLatencyMode: Boolean(source.isLive),
         backBufferLength: 60,
         maxBufferLength: 30,
+        manifestLoadingTimeOut: 9000,
+        levelLoadingTimeOut: 9000,
+        fragLoadingTimeOut: 9000,
       });
       hlsRef.current = hls;
+
+      hls.on(Hls.Events.MANIFEST_LOADING, () => {
+        if (!cancelled) setConnectionLabel('Connexion au flux...');
+      });
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
         if (cancelled) return;
@@ -212,32 +328,72 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
             : `${Math.max(100, Math.round((lvl.bitrate || 0) / 1000))} kbps`,
         }));
         setQualityLevels(levels);
-        setIsBuffering(false);
-        setConnectionLabel(source.isLive ? 'En direct (HLS)' : 'Prêt (HLS)');
-        video.play().catch(() => {
-          // Autoplay may require user interaction on mobile/desktop; controls stay ready
-        });
+        setConnectionLabel('Connexion au flux...');
+        void attemptAutoPlay();
+      });
+
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        if (!cancelled && !playbackConfirmed) {
+          setIsBuffering(false);
+        }
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (cancelled) return;
-        if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            setConnectionLabel('Reprise réseau...');
-            setIsBuffering(true);
-            hls.startLoad();
-          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-            setConnectionLabel('Récupération média...');
-            hls.recoverMediaError();
-          } else {
-            setIsBuffering(false);
-            setIsPlaying(false);
-            setConnectionLabel('Flux indisponible');
-            setErrorMsg(
-              'Impossible de décoder ce flux HLS. Vérifiez votre connexion ou réessayez.'
-            );
-            hls.destroy();
+        if (cancelled || !data.fatal) return;
+
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 2) {
+          networkRetries += 1;
+          setConnectionLabel('Connexion au flux...');
+          setIsBuffering(true);
+          retryTimer = setTimeout(() => {
+            if (!cancelled && hlsRef.current) {
+              hlsRef.current.startLoad();
+            }
+          }, 1200 * networkRetries);
+          return;
+        }
+
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoverAttempts < 2) {
+          mediaRecoverAttempts += 1;
+          setConnectionLabel('Connexion au flux...');
+          if (mediaRecoverAttempts === 2) {
+            hls.swapAudioCodec();
           }
+          hls.recoverMediaError();
+          return;
+        }
+
+        setIsBuffering(false);
+        setIsPlaying(false);
+        const httpStatus = data.response?.code;
+        const isCorsOrCodec =
+          data.type === Hls.ErrorTypes.MEDIA_ERROR ||
+          (data.type === Hls.ErrorTypes.NETWORK_ERROR && !httpStatus && data.details?.includes('manifestLoadError'));
+
+        if (httpStatus && httpStatus >= 400) {
+          const reason = `Le serveur de diffusion a retourné HTTP ${httpStatus}.`;
+          setErrorMsg('Cette chaîne est temporairement indisponible.');
+          setErrorDetail(reason);
+          setConnectionLabel('Cette chaîne est temporairement indisponible.');
+          onPlaybackFailedRef.current?.(reason, 'unavailable');
+        } else if (isCorsOrCodec) {
+          const reason =
+            'Flux bloqué par les règles CORS du diffuseur ou codec non compatible avec ce navigateur.';
+          setErrorMsg('Impossible de lire cette chaîne.');
+          setErrorDetail(reason);
+          setConnectionLabel('Impossible de lire cette chaîne.');
+          onPlaybackFailedRef.current?.(reason, 'incompatible');
+        } else {
+          const reason = 'Interruption réseau ou flux temporairement hors ligne.';
+          setErrorMsg('Cette chaîne est temporairement indisponible.');
+          setErrorDetail(reason);
+          setConnectionLabel('Cette chaîne est temporairement indisponible.');
+          onPlaybackFailedRef.current?.(reason, 'unavailable');
+        }
+
+        hls.destroy();
+        if (hlsRef.current === hls) {
+          hlsRef.current = null;
         }
       });
 
@@ -246,15 +402,18 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
     } else if (isHlsSource && video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = source.streamUrl;
       video.load();
-      video.play().catch(() => {});
+      void attemptAutoPlay();
     } else {
       video.src = source.streamUrl;
       video.load();
-      video.play().catch(() => {});
+      void attemptAutoPlay();
     }
 
     return () => {
       cancelled = true;
+      clearTimeout(watchdogTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      video.removeEventListener('loadstart', handleLoadStart);
       video.removeEventListener('loadedmetadata', handleLoadedMeta);
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('waiting', handleWaiting);
@@ -266,11 +425,12 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      video.pause();
       video.removeAttribute('src');
+      video.load();
     };
   }, [source.streamUrl, source.isLive, isEmbed, isHlsSource, reloadNonce]);
 
-  // Periodic watch progress callback for resume playback
   useEffect(() => {
     if (!onProgress || isEmbed) return;
     const timer = setInterval(() => {
@@ -287,18 +447,40 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
     if (!v) return;
     if (v.paused) {
       v.play().catch(() => {
-        setErrorMsg('Appuyez de nouveau pour lancer la lecture audio/vidéo.');
+        v.muted = true;
+        setIsMuted(true);
+        v.play().catch(() => {
+          setErrorMsg('Impossible de lire cette chaîne.');
+        });
       });
     } else {
       v.pause();
     }
   }, []);
 
-  const toggleMute = () => {
+  const activateSound = useCallback(() => {
     const v = videoRef.current;
-    const nextMuted = !isMuted;
-    setIsMuted(nextMuted);
-    if (v) v.muted = nextMuted;
+    hasUserUnmutedRef.current = true;
+    setIsMuted(false);
+    const targetVol = volume > 0 ? volume : 0.85;
+    if (volume === 0) setVolume(targetVol);
+    if (v) {
+      v.muted = false;
+      v.volume = targetVol;
+      if (v.paused) {
+        v.play().catch(() => {});
+      }
+    }
+  }, [volume]);
+
+  const toggleMute = () => {
+    if (isMuted) {
+      activateSound();
+    } else {
+      hasUserUnmutedRef.current = false;
+      setIsMuted(true);
+      if (videoRef.current) videoRef.current.muted = true;
+    }
   };
 
   const handleVolumeChange = (val: number) => {
@@ -307,8 +489,12 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
     if (v) {
       v.volume = val;
       if (val > 0 && isMuted) {
+        hasUserUnmutedRef.current = true;
         v.muted = false;
         setIsMuted(false);
+      } else if (val === 0) {
+        v.muted = true;
+        setIsMuted(true);
       }
     }
   };
@@ -347,14 +533,15 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
   return (
     <div
       ref={containerRef}
-      className="rounded-3xl overflow-hidden border border-slate-200/80 dark:border-slate-800 bg-[#04112B] text-white shadow-[0_24px_65px_-20px_rgba(4,17,43,0.75)]"
+      className="rounded-3xl overflow-hidden border border-white/10 bg-[#04112B] text-white shadow-[0_24px_65px_-20px_rgba(4,17,43,0.75)]"
     >
       {/* Top Channel / Broadcast Identity Bar */}
-      <div className="px-4 sm:px-6 py-3.5 bg-[#061A40]/95 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 sm:px-5 py-3.5 bg-[#061A40] border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/15 bg-white/10 shrink-0 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl overflow-hidden border border-white/15 bg-white/10 shrink-0 flex items-center justify-center">
             {source.logoUrl ? (
               <ResilientImage
+                key={source.logoUrl}
                 src={source.logoUrl}
                 alt={source.title}
                 className="w-full h-full object-contain p-1"
@@ -365,13 +552,13 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-sm sm:text-base font-bold text-white truncate max-w-[260px] sm:max-w-md">
+              <h2 className="text-sm sm:text-base font-bold text-white truncate max-w-[220px] sm:max-w-md">
                 {source.title}
               </h2>
               {source.isLive && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-600/90 text-[10px] font-bold tracking-wide text-white uppercase">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-600 text-[10px] font-bold tracking-wide text-white uppercase">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                  Direct
+                  EN DIRECT
                 </span>
               )}
             </div>
@@ -381,8 +568,8 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 border border-white/10 text-[11px] font-medium text-blue-100">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/10 text-[11px] font-medium text-blue-100">
             <Wifi
               className={`w-3.5 h-3.5 ${
                 errorMsg
@@ -400,7 +587,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
       </div>
 
       {/* Video Stage */}
-      <div className="relative aspect-video bg-black flex items-center justify-center">
+      <div className="relative aspect-video bg-[#020A1B] flex items-center justify-center">
         {isEmbed && mediaInfo.embedUrl ? (
           <iframe
             src={mediaInfo.embedUrl}
@@ -414,36 +601,76 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
             <video
               ref={videoRef}
               playsInline
+              muted={isMuted}
               onClick={togglePlay}
-              className="w-full h-full object-contain cursor-pointer"
+              className="w-full h-full object-contain cursor-pointer bg-black"
               aria-label={`Lecteur vidéo pour ${source.title}`}
             />
 
+            {/* Unmute CTA while muted autoplay is active */}
+            {!errorMsg && isMuted && (isPlaying || !isBuffering) && (
+              <button
+                type="button"
+                onClick={activateSound}
+                data-testid="unmute-cta"
+                className="absolute bottom-4 left-4 z-20 min-h-[44px] px-4 py-2 rounded-xl bg-[#F5B82E] hover:bg-[#FACC15] text-[#04112B] text-xs font-extrabold shadow-lg inline-flex items-center gap-2 cursor-pointer transition-transform active:scale-[0.98]"
+              >
+                <Volume2 className="w-4 h-4" aria-hidden="true" />
+                <span>Activer le son</span>
+              </button>
+            )}
+
+            {/* Informative Loading / Connection Overlay (never an unexplained black screen) */}
             {isBuffering && !errorMsg && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[#04112B]/45 backdrop-blur-[1px]">
-                <div className="px-4 py-2.5 rounded-2xl bg-[#061A40]/90 border border-white/15 flex items-center gap-2.5 text-xs font-medium text-white shadow-lg">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-b from-[#04112B]/80 via-[#061A40]/75 to-[#04112B]/85 px-6 text-center">
+                {source.logoUrl && (
+                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white/10 border border-white/15 p-1.5">
+                    <ResilientImage
+                      key={`overlay-${source.logoUrl}`}
+                      src={source.logoUrl}
+                      alt={source.title}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                )}
+                <div className="px-4 py-2 rounded-xl bg-[#04112B]/90 border border-white/15 flex items-center gap-2.5 text-xs font-semibold text-white shadow-lg">
                   <RefreshCw className="w-4 h-4 animate-spin text-[#F5B82E]" aria-hidden="true" />
                   <span>{connectionLabel}</span>
                 </div>
               </div>
             )}
 
+            {/* Error Overlay */}
             {errorMsg && (
-              <div className="absolute inset-0 flex items-center justify-center bg-[#04112B]/90 p-6 text-center">
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#04112B]/95 p-6 text-center">
                 <div className="max-w-md space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-400/30 text-rose-300 flex items-center justify-center mx-auto">
                     <AlertTriangle className="w-6 h-6" aria-hidden="true" />
                   </div>
-                  <p className="text-sm font-semibold text-white">Interruption du flux</p>
-                  <p className="text-xs text-blue-100/80 leading-relaxed">{errorMsg}</p>
-                  <button
-                    type="button"
-                    onClick={() => setReloadNonce((n) => n + 1)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F5B82E] hover:bg-[#FACC15] text-[#061A40] text-xs font-bold cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
-                    Réessayer le flux
-                  </button>
+                  <p className="text-sm sm:text-base font-bold text-white">{errorMsg}</p>
+                  {errorDetail && (
+                    <p className="text-xs text-blue-100/80 leading-relaxed">{errorDetail}</p>
+                  )}
+                  <div className="pt-1 flex flex-wrap items-center justify-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setReloadNonce((n) => n + 1)}
+                      className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#F5B82E] hover:bg-[#FACC15] text-[#061A40] text-xs font-bold cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+                      Réessayer le flux
+                    </button>
+                    {onNextChannel && (
+                      <button
+                        type="button"
+                        onClick={onNextChannel}
+                        className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1D4ED8] hover:bg-[#2563EB] text-white text-xs font-semibold cursor-pointer"
+                      >
+                        <SkipForward className="w-3.5 h-3.5" aria-hidden="true" />
+                        Chaîne suivante
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -451,7 +678,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
         )}
       </div>
 
-      {/* Custom Player Controls Bar (for HLS / MP4 streams) */}
+      {/* Custom Player Controls Bar (HLS / MP4) */}
       {!isEmbed && (
         <div className="px-4 sm:px-5 py-3 bg-[#051536] border-t border-white/10 space-y-2">
           {duration > 0 && Number.isFinite(duration) && (
@@ -470,8 +697,8 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={togglePlay}
@@ -485,11 +712,18 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
               <button
                 type="button"
                 onClick={toggleMute}
-                className="w-11 h-11 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 flex items-center justify-center text-white cursor-pointer"
+                className={`min-w-[44px] h-11 px-3 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold cursor-pointer ${
+                  isMuted
+                    ? 'border-[#F5B82E]/70 bg-[#F5B82E]/15 text-[#F5B82E] hover:bg-[#F5B82E]/25'
+                    : 'border-white/15 bg-white/5 hover:bg-white/10 text-white'
+                }`}
                 aria-label={isMuted ? 'Activer le son' : 'Couper le son'}
               >
                 {isMuted || volume === 0 ? (
-                  <VolumeX className="w-4 h-4 text-rose-300" />
+                  <>
+                    <VolumeX className="w-4 h-4" />
+                    <span className="hidden md:inline">Activer le son</span>
+                  </>
                 ) : (
                   <Volume2 className="w-4 h-4 text-[#F5B82E]" />
                 )}
@@ -503,7 +737,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
                 value={isMuted ? 0 : volume}
                 onChange={(e) => handleVolumeChange(Number(e.target.value))}
                 aria-label="Volume"
-                className="w-20 sm:w-28 accent-[#F5B82E] cursor-pointer"
+                className="w-20 sm:w-24 accent-[#F5B82E] cursor-pointer"
               />
             </div>
 
@@ -525,7 +759,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
                   </button>
 
                   {qualityMenuOpen && (
-                    <div className="absolute right-0 bottom-13 w-36 rounded-xl border border-white/15 bg-[#061A40] shadow-xl p-1.5 z-30 space-y-0.5">
+                    <div className="absolute right-0 bottom-13 w-40 rounded-xl border border-white/15 bg-[#061A40] shadow-xl p-1.5 z-30 space-y-0.5">
                       <button
                         type="button"
                         onClick={() => handleQualitySelect(-1)}

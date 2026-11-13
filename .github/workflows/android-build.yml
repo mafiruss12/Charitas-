@@ -1,0 +1,55 @@
+name: Android CI — Build APK, AAB & Unit Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android/**'
+  workflow_dispatch:
+
+jobs:
+  android-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Run Kotlin & Room Unit Tests
+        run: gradle testDebugUnitTest
+
+      - name: Build Debug APK
+        run: gradle assembleDebug
+
+      - name: Build Release App Bundle (AAB)
+        run: gradle bundleRelease
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: charitas-ebimpe-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+
+      - name: Upload Release AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: charitas-ebimpe-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
