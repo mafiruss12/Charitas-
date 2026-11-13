@@ -6,11 +6,15 @@ on:
     paths:
       - "android/**"
       - ".github/workflows/android-build.yml"
+      - "public/app-version.json"
   pull_request:
     branches: [main]
     paths:
       - "android/**"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   android-build:
@@ -33,7 +37,6 @@ jobs:
           unzip -q cmdtools.zip
           rm -rf "$ANDROID_HOME/cmdline-tools/latest"
           mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
-          # zip extracts to cmdline-tools/{bin,lib,...}
           if [ -d cmdline-tools/bin ]; then
             mv cmdline-tools/* "$ANDROID_HOME/cmdline-tools/latest/"
           else
@@ -44,7 +47,8 @@ jobs:
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME"             "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" \
+            "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -68,16 +72,58 @@ jobs:
         run: gradle bundleRelease --stacktrace
         continue-on-error: true
 
-      - uses: actions/upload-artifact@v4
+      - name: Prepare release assets
         if: success()
+        run: |
+          set -eux
+          mkdir -p release-assets
+          APK=$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
+          cp "$APK" release-assets/charitas-ebimpe-debug.apk
+          # version from gradle
+          VC=$(grep -E 'versionCode\s*=' android/app/build.gradle.kts | head -1 | sed -E 's/[^0-9]//g')
+          VN=$(grep -E 'versionName\s*=' android/app/build.gradle.kts | head -1 | sed -E 's/.*versionName\s*=\s*"([^"]+)".*/\1/')
+          echo "VERSION_CODE=$VC" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$VN" >> "$GITHUB_ENV"
+          echo "Prepared charitas-ebimpe-debug.apk ($VN / $VC)"
+
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
           name: charitas-ebimpe-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: release-assets/charitas-ebimpe-debug.apk
           if-no-files-found: warn
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload AAB artifact
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: charitas-ebimpe-release-aab
           path: android/app/build/outputs/bundle/release/*.aab
           if-no-files-found: ignore
+
+      - name: Publish GitHub Release (latest APK)
+        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}-${{ github.run_number }}
+          name: Charitas Android ${{ env.VERSION_NAME }} (build ${{ github.run_number }})
+          body: |
+            ## Charitas — Église Saint Louis Roi d'Ebimpé
+
+            - **versionName** : `${{ env.VERSION_NAME }}`
+            - **versionCode** : `${{ env.VERSION_CODE }}`
+            - **APK** : `charitas-ebimpe-debug.apk`
+
+            ### Installation
+            1. Téléchargez `charitas-ebimpe-debug.apk`
+            2. Autorisez l'installation depuis des sources inconnues si demandé
+            3. Ouvrez le fichier pour installer / mettre à jour
+
+            Lien stable (dernière release) :
+            https://github.com/mafiruss12/Charitas-/releases/latest/download/charitas-ebimpe-debug.apk
+          files: release-assets/charitas-ebimpe-debug.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
