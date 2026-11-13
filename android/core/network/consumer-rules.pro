@@ -1,0 +1,5 @@
+-keepattributes Signature,InnerClasses,EnclosingMethod
+-keep class ci.ebimpe.charitas.core.model.** { *; }
+-keep class ci.ebimpe.charitas.core.network.** { *; }
+-dontwarn okhttp3.**
+-dontwarn retrofit2.**

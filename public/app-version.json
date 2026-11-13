@@ -1,0 +1,11 @@
+{
+  "packageName": "ci.ebimpe.charitas",
+  "versionCode": 3,
+  "versionName": "1.0.2",
+  "minSupportedVersionCode": 1,
+  "forceUpdate": false,
+  "releaseNotes": "CHARITAS TV : chaînes religieuses iptv-org (Religious uniquement), lecture HTTP/HLS, catalogue même sans API église.",
+  "apkUrl": "https://github.com/mafiruss12/Charitas-/releases/latest/download/charitas-ebimpe-debug.apk",
+  "pageUrl": "https://github.com/mafiruss12/Charitas-/releases/latest",
+  "publishedAt": "2026-11-13"
+}

@@ -1,0 +1,6 @@
+{
+  "summary":  "Rapport d'audit complet du projet CHARITAS (architecture, rôles RBAC, API, sécurité RLS, écarts backend pour le mode visiteur/Bible/médias, et contrainte APK/AAB dans la sandbox) suivi du plan technique en 8 phases pour l'application Android native Kotlin / Jetpack Compose / Material 3 avec mode hors connexion et Bible complète LSG 1910.",
+  "updatedAt":  "2026-11-13T11:17:01.954736358Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}
