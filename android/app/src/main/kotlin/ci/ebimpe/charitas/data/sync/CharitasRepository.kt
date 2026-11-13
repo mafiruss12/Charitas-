@@ -301,6 +301,11 @@ class CharitasRepository(
         }
     }
 
+    /**
+     * Catalogue TV : source principale = playlist **Religious** iptv-org
+     * (https://github.com/iptv-org/iptv), éventuellement enrichie des chaînes
+     * église si l'API CHARITAS répond.
+     */
     suspend fun loadTvCatalog(
         churchId: Int,
         category: String? = null,
@@ -308,73 +313,81 @@ class CharitasRepository(
         forceRefresh: Boolean = false
     ): RepoResult<PublicTvCatalogResponseDto> {
         val normalizedSearch = search?.trim()?.ifBlank { null }
-        val refreshParam = if (forceRefresh) 1 else null
-        val cacheKey = "public:tv:$churchId:${category ?: "all"}"
+        val cacheKey = "public:tv:iptv-org-religious:${category ?: "all"}"
 
-        // 1) API CHARITAS
+        // 1) Source principale : iptv-org / categories/religious.m3u
+        val iptvResult = runCatching {
+            TvFallbackCatalog.load(
+                churchId = churchId,
+                category = category,
+                search = normalizedSearch,
+                forceRefresh = forceRefresh
+            )
+        }
+
+        // 2) Optionnel : chaînes église via API (si dispo)
+        var churchChannels: List<ci.ebimpe.charitas.core.model.TvChannelDto> = emptyList()
         if (networkMonitor.refreshNow()) {
             val apiResult = runCatching {
                 api.getPublicTvCatalog(
                     churchId = churchId.takeIf { it > 0 },
                     category = category,
                     search = normalizedSearch,
-                    refresh = refreshParam
+                    refresh = if (forceRefresh) 1 else null
                 )
-            }
-            val res = apiResult.getOrNull()
-            val body = res?.body()
-            if (res != null && res.isSuccessful && body != null && body.channels.isNotEmpty()) {
-                cacheDao.putCachedJson(
-                    CachedJsonPayloadEntity(
-                        cacheKey = cacheKey,
-                        isPrivateUserScope = false,
-                        payloadJson = json.encodeToString(body)
-                    )
-                )
-                return RepoResult.Success(body, fromCache = false)
+            }.getOrNull()
+            val body = apiResult?.body()
+            if (apiResult != null && apiResult.isSuccessful && body != null) {
+                churchChannels = body.channels.filter { it.id > 0 }
             }
         }
 
-        // 2) Cache local
+        val iptv = iptvResult.getOrNull()
+        if (iptv != null && iptv.channels.isNotEmpty()) {
+            val merged = if (churchChannels.isEmpty()) iptv
+            else {
+                val combined = (churchChannels + iptv.channels).distinctBy { it.streamUrl }
+                iptv.copy(
+                    channels = combined,
+                    recommendedChannels = (churchChannels.filter { it.isRecommended } + iptv.recommendedChannels)
+                        .distinctBy { it.streamUrl }
+                        .take(12),
+                    categories = (churchChannels.map { it.category } + iptv.categories).distinct().sorted()
+                )
+            }
+            cacheDao.putCachedJson(
+                CachedJsonPayloadEntity(
+                    cacheKey = cacheKey,
+                    isPrivateUserScope = false,
+                    payloadJson = json.encodeToString(merged)
+                )
+            )
+            return RepoResult.Success(merged, fromCache = false)
+        }
+
+        // 3) Cache
         val cached = cacheDao.getCachedJson(cacheKey)
             ?.let { runCatching { json.decodeFromString<PublicTvCatalogResponseDto>(it.payloadJson) }.getOrNull() }
         if (cached != null && cached.channels.isNotEmpty()) {
-            val filtered = if (normalizedSearch != null) {
-                val q = normalizedSearch.lowercase()
-                cached.copy(channels = cached.channels.filter {
-                    "${it.name} ${it.category} ${it.language} ${it.country ?: ""}".lowercase().contains(q)
-                })
-            } else cached
-            return RepoResult.Success(filtered, fromCache = true)
+            return RepoResult.Success(cached, fromCache = true)
         }
 
-        // 3) Secours : playlist religieuse publique (iptv-org) — lecture live même si API 404
-        return try {
-            val fallback = TvFallbackCatalog.load(
+        // 4) API seule si iptv a échoué mais API a des chaînes
+        if (churchChannels.isNotEmpty()) {
+            val dto = PublicTvCatalogResponseDto(
                 churchId = churchId,
-                category = category,
-                search = normalizedSearch
+                churchName = "CHARITAS TV",
+                categories = churchChannels.map { it.category }.distinct(),
+                channels = churchChannels,
+                recommendedChannels = churchChannels.filter { it.isRecommended }.ifEmpty { churchChannels.take(6) }
             )
-            if (fallback.channels.isEmpty()) {
-                RepoResult.Error(
-                    "Aucune chaîne TV disponible. Vérifiez la connexion ou réessayez plus tard."
-                )
-            } else {
-                cacheDao.putCachedJson(
-                    CachedJsonPayloadEntity(
-                        cacheKey = cacheKey,
-                        isPrivateUserScope = false,
-                        payloadJson = json.encodeToString(fallback)
-                    )
-                )
-                RepoResult.Success(fallback, fromCache = false)
-            }
-        } catch (e: Exception) {
-            RepoResult.Error(
-                e.message?.takeIf { it.isNotBlank() }
-                    ?: "Impossible de charger le catalogue TV (API et secours M3U en échec)."
-            )
+            return RepoResult.Success(dto, fromCache = false)
         }
+
+        return RepoResult.Error(
+            iptvResult.exceptionOrNull()?.message
+                ?: "Impossible de charger les chaînes religieuses iptv-org. Vérifiez Internet."
+        )
     }
 
     suspend fun verifyTvChannelNow(channelId: Int): TvChannelDto? {
