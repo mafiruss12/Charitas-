@@ -19,7 +19,7 @@ import {
   users,
 } from '../db/schema.ts';
 import { getClientIp, requireAuth, requireChurchPermission, type AuthRequest } from '../middleware/auth.ts';
-import { sendToUserInChurch } from '../realtime/ws.ts';
+import { broadcastToChurch, sendToUserInChurch } from '../realtime/ws.ts';
 
 export const socialRouter = Router({ mergeParams: true });
 socialRouter.use(requireAuth);
@@ -185,6 +185,14 @@ socialRouter.post(
           return post;
         }
       );
+
+      if (!created.groupId) {
+        broadcastToChurch(churchId, 'social:post_created', {
+          id: created.id,
+          postType: created.postType,
+          authorName: req.authUser!.fullName,
+        });
+      }
 
       return res.status(201).json({ post: created });
     } catch (error) {

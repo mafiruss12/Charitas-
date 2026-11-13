@@ -94,10 +94,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({ onRefreshWorks
     <div className="space-y-6">
       <div>
         <h2 className="font-display text-2xl font-semibold text-stone-900 dark:text-white">
-          Administration Centrale Multi-Églises
+          Administration Centrale CHARITAS — Multi-Églises
         </h2>
         <p className="text-sm text-stone-500 dark:text-slate-400">
-          Supervision globale des tenants, activation des modules, plans SaaS et modération réseau.
+          Supervision globale des paroisses CHARITAS, activation des modules, plans et modération réseau.
         </p>
       </div>
 

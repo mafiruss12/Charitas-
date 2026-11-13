@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { AuthViews } from './components/AuthViews';
 import { LandingView } from './components/LandingView';
 import { Phase1Workspace } from './components/Phase1Workspace';
+import { OfflineIndicator } from './components/PWAInstallButton';
+import { SplashScreen } from './components/SplashScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 const AppRouter: React.FC = () => {
@@ -10,26 +12,43 @@ const AppRouter: React.FC = () => {
   const [authMode, setAuthMode] = useState<'landing' | 'login' | 'register' | 'forgot'>('landing');
   const [prefillChurchId, setPrefillChurchId] = useState<number | undefined>();
   const [prefillInviteCode, setPrefillInviteCode] = useState<string | undefined>();
+  const [introActive, setIntroActive] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('charitas_splash_seen');
+    } catch {
+      return true;
+    }
+  });
 
+  useEffect(() => {
+    if (!introActive) return;
+    const timer = window.setTimeout(() => {
+      try {
+        sessionStorage.setItem('charitas_splash_seen', '1');
+      } catch {
+        // ignore storage errors
+      }
+      setIntroActive(false);
+    }, 950);
+    return () => window.clearTimeout(timer);
+  }, [introActive]);
+
+  const dismissIntro = () => {
+    try {
+      sessionStorage.setItem('charitas_splash_seen', '1');
+    } catch {
+      // ignore
+    }
+    setIntroActive(false);
+  };
+
+  let mainContent: React.ReactNode;
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#FAF7F2] dark:bg-[#0B111E] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1B365D] dark:text-amber-400" />
-          <p className="text-xs text-stone-600 dark:text-slate-400">
-            Chargement de Charitas — Église Saint Louis Roi d’Ebimpé...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (user) {
-    return <Phase1Workspace />;
-  }
-
-  if (authMode === 'landing') {
-    return (
+    mainContent = null;
+  } else if (user) {
+    mainContent = <Phase1Workspace />;
+  } else if (authMode === 'landing') {
+    mainContent = (
       <LandingView
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -40,15 +59,34 @@ const AppRouter: React.FC = () => {
         }}
       />
     );
+  } else {
+    mainContent = (
+      <AuthViews
+        initialMode={authMode}
+        prefillChurchId={prefillChurchId}
+        prefillInviteCode={prefillInviteCode}
+        onBackToLanding={() => setAuthMode('landing')}
+      />
+    );
   }
 
   return (
-    <AuthViews
-      initialMode={authMode}
-      prefillChurchId={prefillChurchId}
-      prefillInviteCode={prefillInviteCode}
-      onBackToLanding={() => setAuthMode('landing')}
-    />
+    <>
+      <AnimatePresence>
+        {(loading || introActive) && (
+          <SplashScreen
+            message={
+              loading
+                ? 'Vérification de votre session CHARITAS...'
+                : 'Chargement de CHARITAS — Église Saint Louis Roi d’Ebimpé...'
+            }
+            onSkip={!loading ? dismissIntro : undefined}
+          />
+        )}
+      </AnimatePresence>
+      {mainContent}
+      <OfflineIndicator />
+    </>
   );
 };
 

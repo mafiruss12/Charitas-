@@ -16,6 +16,8 @@ import { commerceRouter } from './src/routes/commerce.ts';
 import { academyMediaRouter } from './src/routes/academyMedia.ts';
 import { aiRouter } from './src/routes/ai.ts';
 import { superadminRouter } from './src/routes/superadmin.ts';
+import { tvRouter } from './src/routes/tv.ts';
+import { startPeriodicStreamHealthMonitor } from './src/lib/iptv.ts';
 import { createRateLimiter } from './src/middleware/rateLimit.ts';
 import { attachWebSocketServer } from './src/realtime/ws.ts';
 
@@ -60,6 +62,7 @@ export function createApp() {
   app.use('/api/auth', authLimiter, authRouter);
   app.use('/api/superadmin', superadminRouter);
   app.use('/api', churchesRouter);
+  app.use('/api', tvRouter);
   app.use('/api/churches', tenantRouter);
   app.use('/api/churches', socialRouter);
   app.use('/api/churches', messagingRouter);
@@ -107,6 +110,7 @@ async function startServer() {
   server.listen(port, '0.0.0.0', () => {
     console.log(`Charitas — Église Saint Louis Roi d'Ebimpé server listening on http://0.0.0.0:${port}`);
   });
+  startPeriodicStreamHealthMonitor();
 }
 
 // Only bind HTTP listener when executed as entrypoint, not when imported in tests

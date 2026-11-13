@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="charitasBg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#04112B" />
+      <stop offset="55%" stop-color="#061A40" />
+      <stop offset="100%" stop-color="#1750B5" />
+    </linearGradient>
+    <linearGradient id="charitasGold" x1="160" y1="90" x2="352" y2="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FACC15" />
+      <stop offset="55%" stop-color="#F5B82E" />
+      <stop offset="100%" stop-color="#D97706" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#charitasBg)" />
+  <circle cx="256" cy="240" r="176" stroke="#F5B82E" stroke-opacity="0.22" stroke-width="4" />
+  <!-- Sheltering hands -->
+  <path
+    d="M104 252C88 308 108 384 176 428L232 456V388C188 360 164 316 160 264L124 238C114 231 106 239 104 252Z"
+    fill="#FFFFFF"
+  />
+  <path
+    d="M408 252C424 308 404 384 336 428L280 456V388C324 360 348 316 352 264L388 238C398 231 406 239 408 252Z"
+    fill="#FFFFFF"
+  />
+  <!-- Royal blue heart with luminous gold border -->
+  <path
+    d="M256 364C256 364 136 290 136 200C136 157 169 124 210 124C233 124 250 136 256 150C262 136 279 124 302 124C343 124 376 157 376 200C376 290 256 364 256 364Z"
+    fill="#1D4ED8"
+    stroke="url(#charitasGold)"
+    stroke-width="18"
+    stroke-linejoin="round"
+  />
+  <!-- Luminous gold cross -->
+  <path
+    d="M256 96V298M186 184H326"
+    stroke="url(#charitasGold)"
+    stroke-width="30"
+    stroke-linecap="round"
+  />
+</svg>

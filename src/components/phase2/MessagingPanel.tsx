@@ -401,10 +401,10 @@ export const MessagingPanel: React.FC<MessagingPanelProps> = ({ churchId, curren
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="font-display text-3xl font-semibold text-stone-900 dark:text-white">
-            Messagerie & Salons Temps Réel
+            Messagerie CHARITAS &amp; Salons Temps Réel
           </h2>
           <p className="text-sm text-stone-600 dark:text-slate-400">
-            Discussions privées, groupes, salons publics, vocaux et appels audio/vidéo.
+            Discussions privées, groupes de l’Église Saint Louis Roi d’Ebimpé, salons publics, vocaux et appels audio/vidéo.
           </p>
         </div>
         <button

@@ -1,6 +1,6 @@
 {
-  "name": "Charitas — Église Saint Louis Roi d'Ebimpé",
-  "description": "Charitas — Église Saint Louis Roi d'Ebimpé : plateforme paroissiale et humanitaire dédiée à la charité fraternelle, aux dons transparents, à l'entraide des familles, à la vie spirituelle et à la solidarité.",
+  "name": "CHARITAS — Église Saint Louis Roi d'Ebimpé",
+  "description": "CHARITAS — Église Saint Louis Roi d'Ebimpé : plateforme paroissiale, humanitaire et communautaire dédiée à la solidarité fraternelle, aux dons transparents, à CHARITAS TV et à la vie spirituelle.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

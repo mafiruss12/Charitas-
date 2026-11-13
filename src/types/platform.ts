@@ -631,4 +631,194 @@ export interface SuperAdminOverviewResponse {
   }[];
 }
 
+export interface PublicFeaturedChurch extends PublicChurch {
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+}
 
+export interface PublicShowcasePost {
+  id: number;
+  churchId: number;
+  authorName: string;
+  authorAvatar: string | null;
+  postType: string;
+  content: string;
+  mediaUrl: string | null;
+  likesCount: number;
+  commentsCount: number;
+  createdAt: string;
+}
+
+export interface PublicShowcaseEvent {
+  id: number;
+  churchId: number;
+  title: string;
+  description: string | null;
+  eventType: string;
+  location: string | null;
+  startsAt: string;
+  isLive: boolean;
+  registrationsCount: number;
+}
+
+export interface PublicShowcaseCampaign {
+  id: number;
+  churchId: number;
+  title: string;
+  description: string;
+  fundCategory: string;
+  goalAmount: number;
+  collectedAmount: number;
+  currency: string;
+}
+
+export interface PublicShowcaseIntervention {
+  id: number;
+  churchId: number;
+  title: string;
+  summary: string;
+  beneficiariesHelped: number;
+  photoUrl: string | null;
+  publishedAt: string;
+}
+
+export interface PublicShowcaseTestimony {
+  id: number;
+  churchId: number;
+  authorName: string;
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface PublicShowcaseResponse {
+  featuredChurch: PublicFeaturedChurch | null;
+  churches: PublicChurch[];
+  latestPosts: PublicShowcasePost[];
+  upcomingEvents: PublicShowcaseEvent[];
+  activeCampaigns: PublicShowcaseCampaign[];
+  humanitarianActions: PublicShowcaseIntervention[];
+  openVolunteerMissionsCount: number;
+  testimonies: PublicShowcaseTestimony[];
+}
+
+export interface PublicFeedPost extends PublicShowcasePost {
+  hashtags: string[];
+  sharesCount: number;
+  pollOptions: { id: number; postId: number; label: string; votesCount: number }[];
+}
+
+export interface PublicStory {
+  id: number;
+  authorName: string;
+  caption: string;
+  mediaUrl: string | null;
+  backgroundColor: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface PublicFeedResponse {
+  churchId: number;
+  churchName: string;
+  posts: PublicFeedPost[];
+  stories: PublicStory[];
+  availableHashtags: string[];
+}
+
+export interface PublicEventDetail extends PublicShowcaseEvent {
+  endsAt: string | null;
+  streamUrl: string | null;
+}
+
+export interface PublicEventsResponse {
+  churchId: number;
+  churchName: string;
+  serviceSchedule: ServiceScheduleItem[];
+  events: PublicEventDetail[];
+}
+
+export type TvStreamStatus = 'operational' | 'unavailable' | 'pending_check';
+
+export interface TvChannelItem {
+  id: number;
+  churchId: number;
+  name: string;
+  category: string;
+  language: string;
+  country: string | null;
+  logoUrl: string | null;
+  streamUrl: string;
+  streamFormat: 'hls' | 'mp4' | 'embed' | string;
+  sourceOrigin: 'manual' | 'm3u_import' | 'iptv_org' | string;
+  tvgId: string | null;
+  description: string | null;
+  currentProgram: string | null;
+  isRecommended: boolean;
+  isValidated: boolean;
+  isActive: boolean;
+  rightsVerified: boolean;
+  rightsHolder: string | null;
+  rightsNotes: string | null;
+  streamStatus: TvStreamStatus;
+  httpStatus: number | null;
+  lastCheckedAt: string | null;
+  lastCheckError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TvBroadcastItem {
+  id: number;
+  churchId: number;
+  title: string;
+  broadcastType: 'culte' | 'priere' | 'conference' | 'evenement' | 'rediffusion' | string;
+  description: string | null;
+  speakerName: string | null;
+  thumbnailUrl: string | null;
+  streamUrl: string;
+  ingestProvider: 'hls_custom' | 'youtube_live' | 'vimeo' | 'mux_rtmp' | 'replay_mp4' | string;
+  status: 'scheduled' | 'live' | 'replay' | 'archived' | string;
+  scheduledAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  viewersCount: number;
+  createdAt: string;
+}
+
+export interface TvWatchHistoryItem {
+  id: number;
+  churchId: number;
+  channelId: number | null;
+  broadcastId: number | null;
+  lastPositionSeconds: number;
+  durationSeconds: number;
+  watchedAt: string;
+  channel: TvChannelItem | null;
+  broadcast: TvBroadcastItem | null;
+}
+
+export interface TvDiscoveryEntry {
+  index: number;
+  name: string;
+  streamUrl: string;
+  logoUrl: string | null;
+  tvgId: string | null;
+  groupTitle: string | null;
+  language: string;
+  country: string | null;
+  suggestedCategory: string;
+  christianRelevanceScore: number;
+  isLikelyChristian: boolean;
+  streamFormat: 'hls' | 'mp4' | 'embed';
+}
+
+export interface PublicTvCatalogResponse {
+  churchId: number;
+  churchName: string;
+  categories: string[];
+  channels: TvChannelItem[];
+  recommendedChannels: TvChannelItem[];
+  broadcasts: TvBroadcastItem[];
+}

@@ -1781,6 +1781,155 @@ export const saasSubscriptions = pgTable(
   ]
 );
 
+// ==================== MODULE CHARITÉ TV & CHARITÉ LIVE ====================
+
+export const tvChannels = pgTable(
+  'tv_channels',
+  {
+    id: serial('id').primaryKey(),
+    churchId: integer('church_id')
+      .references(() => churches.id, { onDelete: 'cascade' })
+      .notNull(),
+    name: text('name').notNull(),
+    category: text('category').default('TV chrétiennes francophones').notNull(),
+    language: text('language').default('Français').notNull(),
+    country: text('country'),
+    logoUrl: text('logo_url'),
+    streamUrl: text('stream_url').notNull(),
+    streamFormat: text('stream_format').default('hls').notNull(), // hls | mp4 | embed
+    sourceOrigin: text('source_origin').default('manual').notNull(), // manual | m3u_import | iptv_org
+    tvgId: text('tvg_id'),
+    description: text('description'),
+    currentProgram: text('current_program'),
+    isRecommended: boolean('is_recommended').default(false).notNull(),
+    isValidated: boolean('is_validated').default(false).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    rightsVerified: boolean('rights_verified').default(false).notNull(),
+    rightsHolder: text('rights_holder'),
+    rightsNotes: text('rights_notes'),
+    streamStatus: text('stream_status').default('pending_check').notNull(), // operational | unavailable | pending_check
+    httpStatus: integer('http_status'),
+    lastCheckedAt: timestamp('last_checked_at'),
+    lastCheckError: text('last_check_error'),
+    createdByUserId: integer('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('tv_channels_church_idx').on(table.churchId),
+    index('tv_channels_public_idx').on(
+      table.churchId,
+      table.isValidated,
+      table.isActive,
+      table.streamStatus
+    ),
+    pgPolicy('tv_channels_tenant_isolation', {
+      as: 'permissive',
+      for: 'all',
+      to: 'public',
+      using: tenantIsolationSql,
+      withCheck: tenantIsolationSql,
+    }),
+  ]
+);
+
+export const tvBroadcasts = pgTable(
+  'tv_broadcasts',
+  {
+    id: serial('id').primaryKey(),
+    churchId: integer('church_id')
+      .references(() => churches.id, { onDelete: 'cascade' })
+      .notNull(),
+    title: text('title').notNull(),
+    broadcastType: text('broadcast_type').default('culte').notNull(), // culte | priere | conference | evenement | rediffusion
+    description: text('description'),
+    speakerName: text('speaker_name'),
+    thumbnailUrl: text('thumbnail_url'),
+    streamUrl: text('stream_url').notNull(),
+    ingestProvider: text('ingest_provider').default('hls_custom').notNull(), // hls_custom | youtube_live | vimeo | mux_rtmp | replay_mp4
+    status: text('status').default('scheduled').notNull(), // scheduled | live | replay | archived
+    scheduledAt: timestamp('scheduled_at'),
+    startedAt: timestamp('started_at'),
+    endedAt: timestamp('ended_at'),
+    viewersCount: integer('viewers_count').default(0).notNull(),
+    createdByUserId: integer('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('tv_broadcasts_church_idx').on(table.churchId),
+    index('tv_broadcasts_status_idx').on(table.churchId, table.status),
+    pgPolicy('tv_broadcasts_tenant_isolation', {
+      as: 'permissive',
+      for: 'all',
+      to: 'public',
+      using: tenantIsolationSql,
+      withCheck: tenantIsolationSql,
+    }),
+  ]
+);
+
+export const tvFavorites = pgTable(
+  'tv_favorites',
+  {
+    id: serial('id').primaryKey(),
+    churchId: integer('church_id')
+      .references(() => churches.id, { onDelete: 'cascade' })
+      .notNull(),
+    channelId: integer('channel_id')
+      .references(() => tvChannels.id, { onDelete: 'cascade' })
+      .notNull(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('tv_favorites_channel_user_uidx').on(table.channelId, table.userId),
+    index('tv_favorites_church_user_idx').on(table.churchId, table.userId),
+    pgPolicy('tv_favorites_tenant_isolation', {
+      as: 'permissive',
+      for: 'all',
+      to: 'public',
+      using: tenantIsolationSql,
+      withCheck: tenantIsolationSql,
+    }),
+  ]
+);
+
+export const tvWatchHistory = pgTable(
+  'tv_watch_history',
+  {
+    id: serial('id').primaryKey(),
+    churchId: integer('church_id')
+      .references(() => churches.id, { onDelete: 'cascade' })
+      .notNull(),
+    channelId: integer('channel_id').references(() => tvChannels.id, { onDelete: 'cascade' }),
+    broadcastId: integer('broadcast_id').references(() => tvBroadcasts.id, {
+      onDelete: 'cascade',
+    }),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    lastPositionSeconds: integer('last_position_seconds').default(0).notNull(),
+    durationSeconds: integer('duration_seconds').default(0).notNull(),
+    watchedAt: timestamp('watched_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('tv_watch_history_user_idx').on(table.churchId, table.userId, table.watchedAt),
+    pgPolicy('tv_watch_history_tenant_isolation', {
+      as: 'permissive',
+      for: 'all',
+      to: 'public',
+      using: tenantIsolationSql,
+      withCheck: tenantIsolationSql,
+    }),
+  ]
+);
+
 // Drizzle Relations
 export const usersRelations = relations(users, ({ many }) => ({
   memberships: many(churchMemberships),

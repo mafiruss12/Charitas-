@@ -78,6 +78,15 @@ describe('Phase 1 — Fondation, Multi-Tenant, RBAC & RLS', () => {
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.data.churches));
     assert.ok((res.data.churches as unknown[]).length >= 2);
+
+    const showcase = await api('/api/public/showcase');
+    assert.equal(showcase.status, 200);
+    assert.ok(showcase.data.featuredChurch && typeof showcase.data.featuredChurch === 'object');
+    assert.ok(Array.isArray(showcase.data.latestPosts));
+    assert.ok(Array.isArray(showcase.data.upcomingEvents));
+    assert.ok(Array.isArray(showcase.data.activeCampaigns));
+    assert.ok(Array.isArray(showcase.data.humanitarianActions));
+    assert.ok(Array.isArray(showcase.data.testimonies));
   });
 
   it('permet inscription, connexion et réinitialisation de mot de passe', async () => {

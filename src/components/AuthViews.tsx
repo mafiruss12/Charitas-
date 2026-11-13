@@ -166,38 +166,40 @@ export const AuthViews: React.FC<AuthViewsProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] dark:bg-[#0B111E] flex flex-col justify-center py-12 px-4 sm:px-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0B111E] flex flex-col justify-center py-12 px-4 sm:px-6">
       <div className="max-w-md w-full mx-auto">
         <button
           type="button"
           onClick={onBackToLanding}
-          className="inline-flex items-center gap-2 text-xs font-medium text-stone-600 dark:text-slate-400 hover:text-[#1B365D] dark:hover:text-white mb-6 cursor-pointer"
+          className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-[#061A40] dark:hover:text-white mb-6 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           Retour à l’accueil
         </button>
 
-        <div className="rounded-2xl border border-[#E5DED3] dark:border-slate-800 bg-white dark:bg-[#111827] p-7 sm:p-8 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-7 sm:p-8 shadow-sm">
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-4">
               <img
                 src="/src/assets/images/charitas_emblem_crest_1794525619241.jpg"
-                alt="Emblème Charitas Saint-Louis"
-                className="w-10 h-10 rounded-xl object-cover border border-[#E5DED3] dark:border-slate-700"
+                alt="Emblème CHARITAS — Église Saint Louis Roi d’Ebimpé"
+                className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
               />
-              <span className="text-xs font-semibold tracking-wide text-[#881337] dark:text-amber-400">
-                Église Saint Louis Roi d’Ebimpé
+              <span className="text-xs font-semibold tracking-wide text-[#1D4ED8] dark:text-[#60A5FA]">
+                CHARITAS — Église Saint Louis Roi d’Ebimpé
               </span>
             </div>
-            <h1 className="font-display text-3xl font-semibold text-[#1B365D] dark:text-white">
-              {mode === 'login' && 'Connexion à Charitas'}
-              {mode === 'register' && 'Rejoindre Charitas'}
+            <h1 className="font-display text-3xl font-semibold text-[#061A40] dark:text-white">
+              {mode === 'login' && 'Connexion à votre espace'}
+              {mode === 'register' && 'Rejoindre la communauté'}
               {mode === 'forgot' && 'Mot de passe oublié'}
               {mode === 'reset' && 'Réinitialiser le mot de passe'}
             </h1>
-            <p className="mt-1.5 text-sm text-stone-600 dark:text-slate-400">
-              {mode === 'login' && 'Accédez à votre espace paroissial et à vos œuvres solidaires.'}
-              {mode === 'register' && 'Rejoignez la paroisse d’Ebimpé ou créez votre propre assemblée.'}
+            <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
+              {mode === 'login' &&
+                'Accédez à CHARITAS — Église Saint Louis Roi d’Ebimpé et à vos œuvres solidaires.'}
+              {mode === 'register' &&
+                'Rejoignez la paroisse d’Ebimpé ou créez votre propre assemblée.'}
               {mode === 'forgot' && 'Recevez un code sécurisé pour définir un nouveau mot de passe.'}
               {mode === 'reset' && 'Saisissez votre code de réinitialisation et votre nouveau mot de passe.'}
             </p>
@@ -280,7 +282,7 @@ export const AuthViews: React.FC<AuthViewsProps> = ({
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full h-11 rounded-lg bg-[#1B365D] text-white hover:bg-[#132744] dark:bg-amber-600 dark:hover:bg-amber-500 text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                className="w-full h-11 rounded-lg bg-[#1D4ED8] text-white hover:bg-[#1E40AF] text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 Se connecter
@@ -423,7 +425,7 @@ export const AuthViews: React.FC<AuthViewsProps> = ({
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full h-11 rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-500 text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                className="w-full h-11 rounded-lg bg-[#1D4ED8] text-white hover:bg-[#1E40AF] text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 Créer mon compte

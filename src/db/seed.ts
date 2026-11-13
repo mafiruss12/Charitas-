@@ -37,7 +37,7 @@ export async function ensureStarterChurches(): Promise<void> {
       .values([
         {
           slug: 'charitas-saint-louis-roi-ebimpe',
-          name: 'Charitas — Église Saint Louis Roi d’Ebimpé',
+          name: 'CHARITAS — Église Saint Louis Roi d’Ebimpé',
           tagline: 'Foi, Espérance et Charité fraternelle au service des familles d’Ebimpé',
           description:
             'Œuvre caritative et communauté paroissiale de l’Église Saint Louis Roi d’Ebimpé : aide alimentaire, soutien scolaire, soins de proximité, vie spirituelle et transparence solidaire.',
@@ -53,16 +53,16 @@ export async function ensureStarterChurches(): Promise<void> {
           accentColor: '#881337',
           currency: 'XOF',
           serviceSchedule: [
-            { day: 'Dimanche', time: '08:30', title: 'Messe Dominicale & Collecte Charitas', location: 'Église Saint Louis Roi d’Ebimpé' },
+            { day: 'Dimanche', time: '08:30', title: 'Messe Dominicale & Collecte CHARITAS', location: 'Église Saint Louis Roi d’Ebimpé' },
             { day: 'Mercredi', time: '18:00', title: 'Adoration & Chapelet pour les familles', location: 'Chapelle Paroissiale' },
-            { day: 'Samedi', time: '09:30', title: 'Permanence Charitas & Distribution Solidaire', location: 'Maison de la Charité d’Ebimpé' },
+            { day: 'Samedi', time: '09:30', title: 'Permanence CHARITAS & Distribution Solidaire', location: 'Maison de la Charité d’Ebimpé' },
           ],
           isPublic: true,
           status: 'active',
         },
         {
           slug: 'espoir-vivant-yamoussoukro',
-          name: 'Centre Charitas Espoir Vivant',
+          name: 'Centre CHARITAS Espoir Vivant',
           tagline: 'Un refuge spirituel et solidaire au cœur de la Côte d’Ivoire',
           description:
             'Communauté chrétienne dédiée à l’édification spirituelle, à l’encadrement de la jeunesse et aux œuvres caritatives régionales.',
@@ -94,7 +94,7 @@ export async function ensureStarterChurches(): Promise<void> {
         const defaultDepts =
           church.slug === 'charitas-saint-louis-roi-ebimpe'
             ? [
-                { churchId: church.id, name: 'Charitas & Aide Alimentaire', description: 'Colis alimentaires, soutien aux veuves, orphelins et familles d’Ebimpé.' },
+                { churchId: church.id, name: 'CHARITAS & Aide Alimentaire', description: 'Colis alimentaires, soutien aux veuves, orphelins et familles d’Ebimpé.' },
                 { churchId: church.id, name: 'Éducation & Santé Communautaire', description: 'Kits scolaires, alphabétisation et permanences médicales paroissiales.' },
                 { churchId: church.id, name: 'Liturgie, Chorale & Prière', description: 'Animation des messes, adoration et accompagnement spirituel.' },
                 { churchId: church.id, name: 'Accueil & Fraternité', description: 'Accueil des nouveaux arrivants et visites à domicile.' },

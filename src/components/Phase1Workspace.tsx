@@ -24,8 +24,10 @@ import {
   Share2,
   Shield,
   ShoppingBag,
+  SlidersHorizontal,
   Sparkles,
   Sun,
+  Tv,
   UserCheck,
   UserCircle,
   Users,
@@ -36,6 +38,7 @@ import { ROLE_LABELS } from '../db/rbac';
 import { apiFetch } from '../lib/api';
 import type { DashboardResponse, NotificationItem } from '../types/platform';
 import { CreateChurchModal, JoinChurchModal } from './ChurchModals';
+import { PWAInstallButton } from './PWAInstallButton';
 import { ResilientImage } from './ResilientImage';
 import { DepartmentsPanel, MembersPanel } from './phase1/MembersDepartmentsPanels';
 import {
@@ -56,9 +59,13 @@ import { AuctionsPanel } from './phase4/AuctionsPanel';
 import { AcademyMediaPanel } from './phase4/AcademyMediaPanel';
 import { AiAssistantPanel } from './phase4/AiAssistantPanel';
 import { SuperAdminPanel } from './phase5/SuperAdminPanel';
+import { ChariteTvHub } from './tv/ChariteTvHub';
+import { ChariteTvAdminPanel } from './tv/ChariteTvAdminPanel';
 
 type WorkspaceTab =
   | 'dashboard'
+  | 'tv'
+  | 'tv_admin'
   | 'social'
   | 'messaging'
   | 'spiritual'
@@ -150,14 +157,15 @@ export const Phase1Workspace: React.FC = () => {
           <div className="inline-flex items-center gap-3">
             <img
               src="/src/assets/images/charitas_emblem_crest_1794525619241.jpg"
-              alt="Emblème Charitas Saint-Louis"
-              className="w-8 h-8 rounded-lg object-cover border border-[#E5DED3] dark:border-slate-700"
+              alt="Emblème CHARITAS — Église Saint Louis Roi d’Ebimpé"
+              className="w-8 h-8 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
             />
-            <span className="font-display text-2xl font-bold text-[#1B365D] dark:text-white">
-              Charitas Saint-Louis
+            <span className="font-display text-lg sm:text-xl font-bold text-[#061A40] dark:text-white truncate max-w-[260px] sm:max-w-none">
+              CHARITAS — Église Saint Louis Roi d’Ebimpé
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <PWAInstallButton variant="workspace" />
             <button
               type="button"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -179,10 +187,10 @@ export const Phase1Workspace: React.FC = () => {
 
         <main className="max-w-3xl mx-auto px-6 py-16 text-center">
           <p className="text-xs font-semibold text-[#881337] dark:text-amber-400">
-            Bienvenue, {user?.fullName}
+            Bienvenue sur CHARITAS, {user?.fullName}
           </p>
           <h1 className="mt-2 font-display text-4xl font-semibold text-[#1B365D] dark:text-white text-balance">
-            Rejoignez Charitas — Église Saint Louis Roi d’Ebimpé ou créez votre paroisse.
+            Rejoignez CHARITAS — Église Saint Louis Roi d’Ebimpé ou créez votre paroisse.
           </h1>
           <p className="mt-4 text-base text-stone-600 dark:text-slate-400">
             Vous n’êtes encore rattaché à aucune communauté. Choisissez une option ci-dessous pour
@@ -229,6 +237,18 @@ export const Phase1Workspace: React.FC = () => {
       label: 'Tableau de bord',
       icon: <LayoutDashboard className="w-4 h-4" />,
       visible: hasPermission('church.view'),
+    },
+    {
+      id: 'tv',
+      label: 'CHARITAS TV & Live',
+      icon: <Tv className="w-4 h-4" />,
+      visible: hasPermission('church.view'),
+    },
+    {
+      id: 'tv_admin',
+      label: 'Régie CHARITAS TV',
+      icon: <SlidersHorizontal className="w-4 h-4" />,
+      visible: hasPermission('streams.manage'),
     },
     {
       id: 'social',
@@ -353,11 +373,19 @@ export const Phase1Workspace: React.FC = () => {
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex lg:w-72 lg:flex-col border-r border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
         <div className="p-5 border-b border-stone-200 dark:border-slate-800">
+          <div className="mb-3 pb-2.5 border-b border-stone-100 dark:border-slate-800 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-extrabold tracking-[0.14em] text-[#061A40] dark:text-[#F5B82E] uppercase">
+              CHARITAS
+            </span>
+            <span className="text-[10px] font-medium text-stone-500 dark:text-slate-400 truncate">
+              Église Saint Louis Roi d’Ebimpé
+            </span>
+          </div>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl overflow-hidden border border-stone-200 dark:border-slate-700 shrink-0">
               <ResilientImage
                 src={dashboard?.church.logoUrl || activeMembership?.churchLogoUrl}
-                alt="Logo église"
+                alt="Logo CHARITAS"
                 className="w-full h-full object-cover"
               />
             </div>
@@ -478,11 +506,14 @@ export const Phase1Workspace: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0 relative">
+            <div className="hidden sm:block">
+              <PWAInstallButton variant="workspace" />
+            </div>
             <button
               type="button"
               onClick={() => setNotifOpen((v) => !v)}
               className="relative p-2 rounded-lg border border-stone-200 dark:border-slate-700 text-stone-700 dark:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800 cursor-pointer"
-              aria-label="Notifications"
+              aria-label="Notifications CHARITAS"
             >
               <Bell className="w-4 h-4" />
               {notificationsList.some((n) => !n.isRead) && (
@@ -494,7 +525,7 @@ export const Phase1Workspace: React.FC = () => {
             {notifOpen && (
               <div className="absolute right-0 top-12 w-80 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg p-3 z-40 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold">Notifications</span>
+                  <span className="text-xs font-semibold">Notifications CHARITAS</span>
                   <button
                     type="button"
                     onClick={markAllNotificationsRead}
@@ -720,6 +751,19 @@ export const Phase1Workspace: React.FC = () => {
             </div>
           )}
 
+          {tab === 'tv' && activeChurchId && (
+            <ChariteTvHub
+              churchId={activeChurchId}
+              isAuthenticated
+              canManageStreams={hasPermission('streams.manage')}
+              onOpenAdminPanel={() => setTab('tv_admin')}
+            />
+          )}
+
+          {tab === 'tv_admin' && activeChurchId && hasPermission('streams.manage') && (
+            <ChariteTvAdminPanel churchId={activeChurchId} />
+          )}
+
           {tab === 'social' && activeChurchId && (
             <SocialPanel
               churchId={activeChurchId}
@@ -872,9 +916,14 @@ export const Phase1Workspace: React.FC = () => {
             <div className="p-4 border-b border-stone-200 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
                 <Building2 className="w-5 h-5 text-amber-700 shrink-0" />
-                <span className="font-semibold text-sm truncate">
-                  {activeMembership?.churchName}
-                </span>
+                <div className="min-w-0">
+                  <span className="block text-[10px] font-extrabold tracking-widest text-[#061A40] dark:text-[#F5B82E] uppercase">
+                    CHARITAS
+                  </span>
+                  <span className="block font-semibold text-sm truncate">
+                    {activeMembership?.churchName}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"

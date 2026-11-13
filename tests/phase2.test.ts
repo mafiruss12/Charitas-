@@ -427,4 +427,60 @@ describe('Phase 2 — Réseau Social, Messagerie Temps Réel, Vie Spirituelle & 
       'checked_in'
     );
   });
+
+  it('expose les endpoints publics Phase 2 (/public/feed, /public/events, /public/visitor-contact) sans fuite PII', async () => {
+    // Publish a fresh public short video in Church A
+    const shortRes = await api(`/api/churches/${churchAId}/social/posts`, {
+      method: 'POST',
+      token: tokenMemberA,
+      body: {
+        postType: 'short_video',
+        content: 'Témoignage court de solidarité à Ebimpé #solidarite',
+        mediaUrl: 'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+      },
+    });
+    assert.equal(shortRes.status, 201);
+    const shortId = (shortRes.data.post as { id: number }).id;
+
+    const pubFeed = await api(`/api/public/feed?churchId=${churchAId}&type=short_video`);
+    assert.equal(pubFeed.status, 200);
+    assert.ok(
+      (pubFeed.data.posts as { id: number }[]).some((p) => p.id === shortId),
+      'Public short_video should appear in /api/public/feed'
+    );
+
+    const pubEvents = await api(`/api/public/events?churchId=${churchAId}`);
+    assert.equal(pubEvents.status, 200);
+    assert.ok(Array.isArray(pubEvents.data.events));
+    assert.ok((pubEvents.data.events as Record<string, unknown>[]).every((e) => !('qrSecret' in e)));
+
+    const badVisitor = await api('/api/public/visitor-contact', {
+      method: 'POST',
+      body: { churchId: churchAId, fullName: 'Jean Visiteur' },
+    });
+    assert.equal(badVisitor.status, 400);
+
+    const okVisitor = await api('/api/public/visitor-contact', {
+      method: 'POST',
+      body: {
+        churchId: churchAId,
+        fullName: 'Awa Kouadio',
+        phone: '+225 0701020304',
+        interestType: 'priere',
+        message: 'Merci de prier pour notre famille.',
+      },
+    });
+    assert.equal(okVisitor.status, 201);
+    const visitorId = (okVisitor.data.visitor as { id: number }).id;
+
+    // Church A admin sees the visitor; Church B admin does not
+    const listA = await api(`/api/churches/${churchAId}/visitors`, { token: tokenAdminA });
+    assert.equal(listA.status, 200);
+    assert.ok((listA.data.visitors as { id: number }[]).some((v) => v.id === visitorId));
+
+    const listB = await api(`/api/churches/${churchBId}/visitors`, { token: tokenAdminB });
+    assert.equal(listB.status, 200);
+    assert.equal((listB.data.visitors as { id: number }[]).some((v) => v.id === visitorId), false);
+  });
 });
+

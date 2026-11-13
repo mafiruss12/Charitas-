@@ -1,11 +1,29 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import { Router } from 'express';
 import { db, withTenantContext } from '../db/index.ts';
 import { recordAuditLog } from '../db/audit.ts';
 import { ROLE_LABELS, isValidChurchRole } from '../db/rbac.ts';
-import { churchMemberships, churches, departments, invitations } from '../db/schema.ts';
+import {
+  churchEvents,
+  churchMemberships,
+  churches,
+  departments,
+  donationCampaigns,
+  eventRegistrations,
+  interventionReports,
+  invitations,
+  notifications,
+  pollOptions,
+  socialPosts,
+  socialStories,
+  testimonies,
+  users,
+  visitors,
+  volunteerAssignments,
+} from '../db/schema.ts';
 import { ensureStarterChurches, initializeChurchRolePermissions } from '../db/seed.ts';
 import { getClientIp, requireAuth, type AuthRequest } from '../middleware/auth.ts';
+import { broadcastToChurch } from '../realtime/ws.ts';
 
 export const churchesRouter = Router();
 
@@ -42,7 +60,8 @@ churchesRouter.get('/public/churches', async (_req, res) => {
         createdAt: churches.createdAt,
       })
       .from(churches)
-      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')));
+      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')))
+      .orderBy(asc(churches.id));
 
     const enriched = await Promise.all(
       list.map(async (church) => {
@@ -68,6 +87,487 @@ churchesRouter.get('/public/churches', async (_req, res) => {
   } catch (error) {
     console.error('Public churches error:', error);
     return res.status(500).json({ error: 'Impossible de charger les églises publiques.' });
+  }
+});
+
+churchesRouter.get('/public/showcase', async (req, res) => {
+  try {
+    await ensureStarterChurches();
+    const requestedChurchId = req.query.churchId ? Number(req.query.churchId) : null;
+
+    const publicChurches = await db
+      .select({
+        id: churches.id,
+        slug: churches.slug,
+        name: churches.name,
+        tagline: churches.tagline,
+        description: churches.description,
+        denomination: churches.denomination,
+        address: churches.address,
+        city: churches.city,
+        country: churches.country,
+        phone: churches.phone,
+        email: churches.email,
+        website: churches.website,
+        logoUrl: churches.logoUrl,
+        bannerUrl: churches.bannerUrl,
+        primaryColor: churches.primaryColor,
+        accentColor: churches.accentColor,
+        currency: churches.currency,
+        serviceSchedule: churches.serviceSchedule,
+        createdAt: churches.createdAt,
+      })
+      .from(churches)
+      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')))
+      .orderBy(asc(churches.id));
+
+    const enrichedChurches = await Promise.all(
+      publicChurches.map(async (church) => {
+        const stats = await withTenantContext({ churchId: church.id, isSuperAdmin: true }, async (tx) => {
+          const [membersCount] = await tx
+            .select({ count: sql<number>`count(*)::int` })
+            .from(churchMemberships)
+            .where(and(eq(churchMemberships.churchId, church.id), eq(churchMemberships.status, 'active')));
+          const [deptsCount] = await tx
+            .select({ count: sql<number>`count(*)::int` })
+            .from(departments)
+            .where(eq(departments.churchId, church.id));
+          return {
+            membersCount: membersCount?.count ?? 0,
+            departmentsCount: deptsCount?.count ?? 0,
+          };
+        });
+        return { ...church, ...stats };
+      })
+    );
+
+    const featuredChurch =
+      (requestedChurchId
+        ? enrichedChurches.find((c) => c.id === requestedChurchId)
+        : undefined) ||
+      enrichedChurches[0] ||
+      null;
+
+    if (!featuredChurch) {
+      return res.json({
+        featuredChurch: null,
+        churches: [],
+        latestPosts: [],
+        upcomingEvents: [],
+        activeCampaigns: [],
+        humanitarianActions: [],
+        openVolunteerMissionsCount: 0,
+        testimonies: [],
+      });
+    }
+
+    const churchId = featuredChurch.id;
+    const showcase = await withTenantContext({ churchId, isSuperAdmin: true }, async (tx) => {
+      const [latestPosts, rawEvents, activeCampaigns, humanitarianActions, volunteerCountRow, testimoniesRows] =
+        await Promise.all([
+          tx
+            .select({
+              id: socialPosts.id,
+              churchId: socialPosts.churchId,
+              authorName: users.fullName,
+              authorAvatar: users.avatarUrl,
+              postType: socialPosts.postType,
+              content: socialPosts.content,
+              mediaUrl: socialPosts.mediaUrl,
+              likesCount: socialPosts.likesCount,
+              commentsCount: socialPosts.commentsCount,
+              createdAt: socialPosts.createdAt,
+            })
+            .from(socialPosts)
+            .innerJoin(users, eq(socialPosts.authorUserId, users.id))
+            .where(
+              and(
+                eq(socialPosts.churchId, churchId),
+                eq(socialPosts.isModeratedHidden, false),
+                isNull(socialPosts.groupId)
+              )
+            )
+            .orderBy(desc(socialPosts.createdAt))
+            .limit(4),
+          tx
+            .select({
+              id: churchEvents.id,
+              churchId: churchEvents.churchId,
+              title: churchEvents.title,
+              description: churchEvents.description,
+              eventType: churchEvents.eventType,
+              location: churchEvents.location,
+              startsAt: churchEvents.startsAt,
+              isLive: churchEvents.isLive,
+            })
+            .from(churchEvents)
+            .where(eq(churchEvents.churchId, churchId))
+            .orderBy(desc(churchEvents.startsAt))
+            .limit(4),
+          tx
+            .select({
+              id: donationCampaigns.id,
+              churchId: donationCampaigns.churchId,
+              title: donationCampaigns.title,
+              description: donationCampaigns.description,
+              fundCategory: donationCampaigns.fundCategory,
+              goalAmount: donationCampaigns.goalAmount,
+              collectedAmount: donationCampaigns.collectedAmount,
+              currency: donationCampaigns.currency,
+            })
+            .from(donationCampaigns)
+            .where(and(eq(donationCampaigns.churchId, churchId), eq(donationCampaigns.status, 'active')))
+            .orderBy(desc(donationCampaigns.createdAt))
+            .limit(3),
+          tx
+            .select({
+              id: interventionReports.id,
+              churchId: interventionReports.churchId,
+              title: interventionReports.title,
+              summary: interventionReports.summary,
+              beneficiariesHelped: interventionReports.beneficiariesHelpedCount,
+              photoUrl: interventionReports.proofImageUrl,
+              publishedAt: interventionReports.publishedDate,
+            })
+            .from(interventionReports)
+            .where(eq(interventionReports.churchId, churchId))
+            .orderBy(desc(interventionReports.publishedDate))
+            .limit(3),
+          tx
+            .select({ count: sql<number>`count(*)::int` })
+            .from(volunteerAssignments)
+            .where(and(eq(volunteerAssignments.churchId, churchId), eq(volunteerAssignments.status, 'assigned'))),
+          tx
+            .select({
+              id: testimonies.id,
+              churchId: testimonies.churchId,
+              authorName: users.fullName,
+              title: testimonies.title,
+              content: testimonies.content,
+              createdAt: testimonies.createdAt,
+            })
+            .from(testimonies)
+            .innerJoin(users, eq(testimonies.authorUserId, users.id))
+            .where(eq(testimonies.churchId, churchId))
+            .orderBy(desc(testimonies.createdAt))
+            .limit(3),
+        ]);
+
+      const regCounts = await tx
+        .select({
+          eventId: eventRegistrations.eventId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(eventRegistrations)
+        .where(eq(eventRegistrations.churchId, churchId))
+        .groupBy(eventRegistrations.eventId);
+
+      const regMap = new Map(regCounts.map((r) => [r.eventId, r.count]));
+      const upcomingEvents = rawEvents.map((ev) => ({
+        ...ev,
+        registrationsCount: regMap.get(ev.id) ?? 0,
+      }));
+
+      return {
+        latestPosts,
+        upcomingEvents,
+        activeCampaigns,
+        humanitarianActions,
+        openVolunteerMissionsCount: volunteerCountRow[0]?.count ?? 0,
+        testimonies: testimoniesRows,
+      };
+    });
+
+    return res.json({
+      featuredChurch,
+      churches: enrichedChurches,
+      ...showcase,
+    });
+  } catch (error) {
+    console.error('Public showcase error:', error);
+    return res.status(500).json({ error: 'Impossible de charger les données publiques.' });
+  }
+});
+
+churchesRouter.get('/public/feed', async (req, res) => {
+  try {
+    await ensureStarterChurches();
+    const requestedChurchId = req.query.churchId ? Number(req.query.churchId) : null;
+    const postType = typeof req.query.type === 'string' ? req.query.type : 'all';
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const hashtag = typeof req.query.hashtag === 'string' ? req.query.hashtag.trim().toLowerCase() : '';
+
+    const activeChurches = await db
+      .select({ id: churches.id, name: churches.name })
+      .from(churches)
+      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')))
+      .orderBy(asc(churches.id));
+
+    const targetChurch =
+      (requestedChurchId ? activeChurches.find((c) => c.id === requestedChurchId) : undefined) ||
+      activeChurches[0];
+
+    if (!targetChurch) {
+      return res.json({ churchId: 0, churchName: '', posts: [], stories: [], availableHashtags: [] });
+    }
+
+    const data = await withTenantContext({ churchId: targetChurch.id, isSuperAdmin: true }, async (tx) => {
+      const conditions = [
+        eq(socialPosts.churchId, targetChurch.id),
+        eq(socialPosts.isModeratedHidden, false),
+        isNull(socialPosts.groupId),
+      ];
+      if (postType && postType !== 'all') {
+        conditions.push(eq(socialPosts.postType, postType));
+      }
+      if (search) {
+        conditions.push(ilike(socialPosts.content, `%${search}%`));
+      }
+
+      const rows = await tx
+        .select({
+          id: socialPosts.id,
+          churchId: socialPosts.churchId,
+          authorName: users.fullName,
+          authorAvatar: users.avatarUrl,
+          postType: socialPosts.postType,
+          content: socialPosts.content,
+          mediaUrl: socialPosts.mediaUrl,
+          hashtags: socialPosts.hashtags,
+          likesCount: socialPosts.likesCount,
+          commentsCount: socialPosts.commentsCount,
+          sharesCount: socialPosts.sharesCount,
+          createdAt: socialPosts.createdAt,
+        })
+        .from(socialPosts)
+        .innerJoin(users, eq(socialPosts.authorUserId, users.id))
+        .where(and(...conditions))
+        .orderBy(desc(socialPosts.createdAt))
+        .limit(40);
+
+      const availableHashtags = Array.from(
+        new Set(rows.flatMap((r) => r.hashtags || []))
+      ).slice(0, 14);
+
+      const filtered = hashtag
+        ? rows.filter((r) => (r.hashtags || []).includes(hashtag))
+        : rows;
+
+      const postIds = filtered.map((p) => p.id);
+      const pollRows = postIds.length
+        ? await tx
+            .select({
+              id: pollOptions.id,
+              postId: pollOptions.postId,
+              label: pollOptions.label,
+              votesCount: pollOptions.votesCount,
+            })
+            .from(pollOptions)
+            .where(inArray(pollOptions.postId, postIds))
+        : [];
+
+      const stories = await tx
+        .select({
+          id: socialStories.id,
+          authorName: users.fullName,
+          caption: socialStories.caption,
+          mediaUrl: socialStories.mediaUrl,
+          backgroundColor: socialStories.backgroundColor,
+          expiresAt: socialStories.expiresAt,
+          createdAt: socialStories.createdAt,
+        })
+        .from(socialStories)
+        .innerJoin(users, eq(socialStories.authorUserId, users.id))
+        .where(and(eq(socialStories.churchId, targetChurch.id), gt(socialStories.expiresAt, new Date())))
+        .orderBy(desc(socialStories.createdAt))
+        .limit(15);
+
+      return {
+        posts: filtered.map((p) => ({
+          ...p,
+          pollOptions: pollRows.filter((o) => o.postId === p.id),
+        })),
+        stories,
+        availableHashtags,
+      };
+    });
+
+    return res.json({
+      churchId: targetChurch.id,
+      churchName: targetChurch.name,
+      ...data,
+    });
+  } catch (error) {
+    console.error('Public feed error:', error);
+    return res.status(500).json({ error: 'Impossible de charger le fil public.' });
+  }
+});
+
+churchesRouter.get('/public/events', async (req, res) => {
+  try {
+    await ensureStarterChurches();
+    const requestedChurchId = req.query.churchId ? Number(req.query.churchId) : null;
+
+    const activeChurches = await db
+      .select({
+        id: churches.id,
+        name: churches.name,
+        serviceSchedule: churches.serviceSchedule,
+      })
+      .from(churches)
+      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')))
+      .orderBy(asc(churches.id));
+
+    const targetChurch =
+      (requestedChurchId ? activeChurches.find((c) => c.id === requestedChurchId) : undefined) ||
+      activeChurches[0];
+
+    if (!targetChurch) {
+      return res.json({ churchId: 0, churchName: '', serviceSchedule: [], events: [] });
+    }
+
+    const events = await withTenantContext({ churchId: targetChurch.id, isSuperAdmin: true }, async (tx) => {
+      const rows = await tx
+        .select({
+          id: churchEvents.id,
+          churchId: churchEvents.churchId,
+          title: churchEvents.title,
+          description: churchEvents.description,
+          eventType: churchEvents.eventType,
+          location: churchEvents.location,
+          startsAt: churchEvents.startsAt,
+          endsAt: churchEvents.endsAt,
+          streamUrl: churchEvents.streamUrl,
+          isLive: churchEvents.isLive,
+        })
+        .from(churchEvents)
+        .where(eq(churchEvents.churchId, targetChurch.id))
+        .orderBy(desc(churchEvents.startsAt))
+        .limit(20);
+
+      const regCounts = await tx
+        .select({
+          eventId: eventRegistrations.eventId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(eventRegistrations)
+        .where(eq(eventRegistrations.churchId, targetChurch.id))
+        .groupBy(eventRegistrations.eventId);
+
+      const regMap = new Map(regCounts.map((r) => [r.eventId, r.count]));
+      return rows.map((ev) => ({
+        ...ev,
+        registrationsCount: regMap.get(ev.id) ?? 0,
+      }));
+    });
+
+    return res.json({
+      churchId: targetChurch.id,
+      churchName: targetChurch.name,
+      serviceSchedule: targetChurch.serviceSchedule || [],
+      events,
+    });
+  } catch (error) {
+    console.error('Public events error:', error);
+    return res.status(500).json({ error: 'Impossible de charger le calendrier public.' });
+  }
+});
+
+churchesRouter.post('/public/visitor-contact', async (req, res) => {
+  try {
+    await ensureStarterChurches();
+    const { churchId: rawChurchId, fullName, email, phone, interestType, message } = req.body ?? {};
+
+    if (typeof fullName !== 'string' || fullName.trim().length < 2) {
+      return res.status(400).json({ error: 'Votre nom complet est requis.' });
+    }
+    const cleanPhone = typeof phone === 'string' ? phone.trim() : '';
+    const cleanEmail = typeof email === 'string' ? email.trim() : '';
+    if (!cleanPhone && !cleanEmail) {
+      return res.status(400).json({ error: 'Indiquez un numéro de téléphone ou une adresse email.' });
+    }
+
+    const activeChurches = await db
+      .select({ id: churches.id, name: churches.name })
+      .from(churches)
+      .where(and(eq(churches.isPublic, true), eq(churches.status, 'active')))
+      .orderBy(asc(churches.id));
+
+    const requestedChurchId = rawChurchId ? Number(rawChurchId) : null;
+    const targetChurch =
+      (requestedChurchId ? activeChurches.find((c) => c.id === requestedChurchId) : undefined) ||
+      activeChurches[0];
+
+    if (!targetChurch) {
+      return res.status(404).json({ error: 'Paroisse introuvable.' });
+    }
+
+    const allowedInterest = ['visite', 'priere', 'benevolat', 'renseignement'];
+    const safeInterest = allowedInterest.includes(String(interestType))
+      ? String(interestType)
+      : 'visite';
+    const cleanMsg = typeof message === 'string' ? message.trim().slice(0, 1200) : '';
+    const today = new Date().toISOString().slice(0, 10);
+
+    const created = await withTenantContext({ churchId: targetChurch.id, isSuperAdmin: true }, async (tx) => {
+      const [visitorRow] = await tx
+        .insert(visitors)
+        .values({
+          churchId: targetChurch.id,
+          fullName: fullName.trim().slice(0, 120),
+          email: cleanEmail || null,
+          phone: cleanPhone || null,
+          visitDate: today,
+          source: `public_web:${safeInterest}`,
+          prayerOrNeed: cleanMsg || null,
+          followUpStatus: 'pending',
+          notes: `Demande envoyée depuis le portail public (${safeInterest}).`,
+        })
+        .returning({
+          id: visitors.id,
+          churchId: visitors.churchId,
+          fullName: visitors.fullName,
+          followUpStatus: visitors.followUpStatus,
+          visitDate: visitors.visitDate,
+        });
+
+      const leaders = await tx
+        .select({ userId: churchMemberships.userId })
+        .from(churchMemberships)
+        .where(
+          and(
+            eq(churchMemberships.churchId, targetChurch.id),
+            eq(churchMemberships.status, 'active'),
+            inArray(churchMemberships.role, ['admin', 'pastor', 'assistant_pastor', 'dept_leader'])
+          )
+        )
+        .limit(10);
+
+      for (const leader of leaders) {
+        await tx.insert(notifications).values({
+          churchId: targetChurch.id,
+          userId: leader.userId,
+          type: 'visitor_inquiry',
+          title: 'Nouveau message visiteur (portail public)',
+          body: `${fullName.trim()} (${safeInterest}) souhaite être contacté.`,
+        });
+      }
+
+      return visitorRow;
+    });
+
+    broadcastToChurch(targetChurch.id, 'visitor:created', {
+      id: created.id,
+      fullName: created.fullName,
+    });
+
+    return res.status(201).json({
+      message: `Votre demande a bien été transmise à l’équipe de ${targetChurch.name}.`,
+      visitor: created,
+    });
+  } catch (error) {
+    console.error('Public visitor contact error:', error);
+    return res.status(500).json({ error: 'Impossible d’enregistrer votre demande pour le moment.' });
   }
 });
 
