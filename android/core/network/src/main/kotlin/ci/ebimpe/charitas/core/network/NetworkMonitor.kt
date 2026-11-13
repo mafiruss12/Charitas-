@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/**
+ * Détection réseau pour CHARITAS.
+ * On se base sur NET_CAPABILITY_INTERNET (pas VALIDATED) pour éviter
+ * les faux "hors ligne" sur mobile (4G/Wi‑Fi en validation DNS lente).
+ */
 class NetworkMonitor(context: Context) {
 
     private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -26,9 +31,7 @@ class NetworkMonitor(context: Context) {
         }
 
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-            _isOnline.value =
-                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            _isOnline.value = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         }
     }
 
