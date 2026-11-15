@@ -52,7 +52,7 @@ object NetworkClientFactory {
                 val contentType = response.header("Content-Type")?.lowercase().orEmpty()
                 val body = response.body
                 if (body != null && body.contentLength() != 0L) {
-                    val peeked = runCatching { body.peekBody(256).string().trimStart() }.getOrDefault("")
+                    val peeked = runCatching { response.peekBody(256).string().trimStart() }.getOrDefault("")
                     val looksHtml = peeked.startsWith("<") ||
                         peeked.startsWith("<!doctype", ignoreCase = true) ||
                         contentType.contains("text/html")

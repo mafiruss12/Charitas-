@@ -50,7 +50,7 @@ jobs:
           SQL_ADMIN_PASSWORD: postgres_ci_password
           PGPASSWORD: postgres_ci_password
         run: |
-          npx drizzle-kit push --force
+          npx drizzle-kit push --config=src/db/drizzle.config.ts --force
           psql -h 127.0.0.1 -U postgres -d charitas_ci -v ON_ERROR_STOP=1 <<'SQL'
             DO $$
             BEGIN
