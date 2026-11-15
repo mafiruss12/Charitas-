@@ -1,10 +1,10 @@
 {
   "packageName": "ci.ebimpe.charitas",
-  "versionCode": 4,
-  "versionName": "1.0.3",
+  "versionCode": 5,
+  "versionName": "1.0.4",
   "minSupportedVersionCode": 1,
   "forceUpdate": false,
-  "releaseNotes": "Correctifs UI mobile (boutons et onglets), garde-fou JSON/HTML réseau, mise à jour CI/CD et stabilité hors ligne.",
+  "releaseNotes": "Nouvelle icône officielle Paroisse Saint Louis Roi d’Ebimpé, logo animé en motion-design partout (accueil, connexion, splash post-login), CHARITAS TV réparé, responsables paroissiaux (Ako Vince, Emmanuel Tanoh, Some Séraphin) et mise à jour APK in-app avec progression et installation directe.",
   "apkUrl": "https://github.com/mafiruss12/Charitas-/releases/latest/download/charitas-ebimpe.apk",
   "pageUrl": "https://github.com/mafiruss12/Charitas-/releases/latest",
   "publishedAt": "2026-11-15"

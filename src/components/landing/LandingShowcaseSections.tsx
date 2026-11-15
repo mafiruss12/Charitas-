@@ -763,6 +763,16 @@ export const LandingShowcaseSections: React.FC<LandingShowcaseSectionsProps> = (
                     </button>
                   </li>
                 )}
+                <li>
+                  <a
+                    href="https://github.com/mafiruss12/Charitas-/releases/latest/download/charitas-ebimpe.apk"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-300 hover:text-[#F5B82E] transition-colors"
+                  >
+                    Télécharger l’APK Android
+                  </a>
+                </li>
               </ul>
             </div>
 

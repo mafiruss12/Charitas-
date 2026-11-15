@@ -77,25 +77,35 @@ jobs:
           CHARITAS_DEBUG_API_BASE_URL: ${{ vars.CHARITAS_DEBUG_API_BASE_URL }}
         run: gradle testDebugUnitTest --stacktrace
 
-      - name: Assemble release & debug APKs
+      - name: Assemble release APK
         working-directory: android
         env:
+          GRADLE_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=1024m"
           CHARITAS_API_BASE_URL: ${{ vars.CHARITAS_API_BASE_URL }}
           CHARITAS_DEBUG_API_BASE_URL: ${{ vars.CHARITAS_DEBUG_API_BASE_URL }}
           SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: gradle assembleRelease assembleDebug --stacktrace
+        run: gradle assembleRelease --no-daemon --max-workers=2 --stacktrace
+
+      - name: Assemble debug APK
+        working-directory: android
+        env:
+          GRADLE_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=1024m"
+          CHARITAS_API_BASE_URL: ${{ vars.CHARITAS_API_BASE_URL }}
+          CHARITAS_DEBUG_API_BASE_URL: ${{ vars.CHARITAS_DEBUG_API_BASE_URL }}
+        run: gradle assembleDebug --no-daemon --max-workers=2 --stacktrace
 
       - name: Bundle release AAB
         working-directory: android
         env:
+          GRADLE_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=1024m"
           CHARITAS_API_BASE_URL: ${{ vars.CHARITAS_API_BASE_URL }}
           CHARITAS_DEBUG_API_BASE_URL: ${{ vars.CHARITAS_DEBUG_API_BASE_URL }}
           SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: gradle bundleRelease --stacktrace
+        run: gradle bundleRelease --no-daemon --max-workers=2 --stacktrace
 
       - name: Prepare release assets
         run: |

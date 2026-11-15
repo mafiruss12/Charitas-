@@ -102,6 +102,7 @@ fun SettingsAuthProfileScreen(
     var feedback by remember { mutableStateOf<String?>(null) }
     var updateInfo by remember { mutableStateOf<AppVersionInfo?>(null) }
     var checkingUpdate by remember { mutableStateOf(false) }
+    var updateStatusMessage by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
     var showForgotDialog by remember { mutableStateOf(false) }
@@ -430,26 +431,59 @@ fun SettingsAuthProfileScreen(
                         fontWeight = FontWeight.Bold,
                         color = CharitasRoyalNavy
                     )
-                    Button(
-                        enabled = !checkingUpdate,
-                        onClick = {
-                            checkingUpdate = true
-                            scope.launch {
-                                when (val r = InAppUpdateChecker.check()) {
-                                    is UpdateCheckResult.Available -> {
-                                        updateInfo = r.info
-                                        feedback = null
-                                    }
-                                    is UpdateCheckResult.UpToDate ->
-                                        feedback = "Vous avez déjà la dernière version (${BuildConfig.VERSION_NAME})."
-                                    is UpdateCheckResult.Error ->
-                                        feedback = r.message
-                                }
-                                checkingUpdate = false
-                            }
-                        }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(if (checkingUpdate) "Vérification…" else "Vérifier les mises à jour")
+                        Button(
+                            enabled = !checkingUpdate,
+                            onClick = {
+                                checkingUpdate = true
+                                updateStatusMessage = "Vérification en cours…"
+                                scope.launch {
+                                    when (val r = InAppUpdateChecker.check()) {
+                                        is UpdateCheckResult.Available -> {
+                                            updateInfo = r.info
+                                            updateStatusMessage = "Nouvelle version ${r.info.versionName} disponible !"
+                                        }
+                                        is UpdateCheckResult.UpToDate ->
+                                            updateStatusMessage = "Vous avez déjà la dernière version (${BuildConfig.VERSION_NAME})."
+                                        is UpdateCheckResult.Error ->
+                                            updateStatusMessage = r.message
+                                    }
+                                    checkingUpdate = false
+                                }
+                            }
+                        ) {
+                            Text(if (checkingUpdate) "Vérification…" else "Vérifier les mises à jour")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                InAppUpdateChecker.openPageOrApk(
+                                    context,
+                                    AppVersionInfo(
+                                        versionCode = BuildConfig.VERSION_CODE,
+                                        versionName = BuildConfig.VERSION_NAME,
+                                        forceUpdate = false,
+                                        releaseNotes = "",
+                                        apkUrl = InAppUpdateChecker.FALLBACK_LATEST_APK_URL,
+                                        pageUrl = InAppUpdateChecker.FALLBACK_RELEASES_PAGE
+                                    )
+                                )
+                            }
+                        ) {
+                            Text("Télécharger l’APK")
+                        }
+                    }
+
+                    updateStatusMessage?.let { msg ->
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
@@ -474,16 +508,9 @@ fun SettingsAuthProfileScreen(
     }
 
     updateInfo?.let { info ->
-        val ctx = LocalContext.current
         InAppUpdateDialog(
             info = info,
-            onDismiss = { updateInfo = null },
-            onUpdate = {
-                if (InAppUpdateChecker.enqueueApkDownload(ctx, info) == null) {
-                    InAppUpdateChecker.openPageOrApk(ctx, info)
-                }
-                if (!info.forceUpdate) updateInfo = null
-            }
+            onDismiss = { updateInfo = null }
         )
     }
 

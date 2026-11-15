@@ -84,14 +84,7 @@ class MainActivity : ComponentActivity() {
                     updateInfo?.let { info ->
                         InAppUpdateDialog(
                             info = info,
-                            onDismiss = { updateInfo = null },
-                            onUpdate = {
-                                val ctx = this@MainActivity
-                                if (InAppUpdateChecker.enqueueApkDownload(ctx, info) == null) {
-                                    InAppUpdateChecker.openPageOrApk(ctx, info)
-                                }
-                                if (!info.forceUpdate) updateInfo = null
-                            }
+                            onDismiss = { updateInfo = null }
                         )
                     }
                 }
