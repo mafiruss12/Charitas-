@@ -3,7 +3,6 @@ import {
   Activity,
   Bell,
   BookOpen,
-  Building2,
   Calendar,
   FolderKanban,
   Gavel,
@@ -45,6 +44,7 @@ import type { DashboardResponse, NotificationItem } from '../types/platform';
 import { CreateChurchModal, JoinChurchModal } from './ChurchModals';
 import { PWAInstallButton } from './PWAInstallButton';
 import { ResilientImage } from './ResilientImage';
+import { ChariteLogoMark } from './landing/ChariteLogoMark';
 import { DepartmentsPanel, MembersPanel } from './phase1/MembersDepartmentsPanels';
 import {
   AuditLogsPanel,
@@ -160,10 +160,11 @@ export const Phase1Workspace: React.FC = () => {
       <div className="min-h-screen bg-[#FAF7F2] dark:bg-[#0B111E] text-stone-900 dark:text-stone-100">
         <header className="border-b border-[#E5DED3] dark:border-slate-800 bg-white dark:bg-[#111827] px-6 h-16 flex items-center justify-between">
           <div className="inline-flex items-center gap-3">
-            <img
-              src={OFFICIAL_PARISH_LOGO}
-              alt={`Emblème ${OFFICIAL_PARISH_NAME}`}
-              className="w-9 h-9 rounded-full object-cover border border-[#F5B82E] bg-white"
+            <ChariteLogoMark
+              logoUrl={OFFICIAL_PARISH_LOGO}
+              churchName={OFFICIAL_PARISH_NAME}
+              sizeClass="w-10 h-10"
+              motion="card"
             />
             <span className="font-display text-lg sm:text-xl font-bold text-[#061A40] dark:text-white truncate max-w-[260px] sm:max-w-none">
               {OFFICIAL_PARISH_NAME}
@@ -191,6 +192,14 @@ export const Phase1Workspace: React.FC = () => {
         </header>
 
         <main className="max-w-3xl mx-auto px-6 py-16 text-center">
+          <div className="mb-5 flex justify-center">
+            <ChariteLogoMark
+              logoUrl={OFFICIAL_PARISH_LOGO}
+              churchName={OFFICIAL_PARISH_NAME}
+              sizeClass="w-20 h-20"
+              motion="hero"
+            />
+          </div>
           <p className="text-xs font-semibold text-[#881337] dark:text-amber-400">
             Bienvenue sur CHARITAS, {user?.fullName}
           </p>
@@ -387,23 +396,22 @@ export const Phase1Workspace: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#F5B82E]/80 bg-white shrink-0">
-              <ResilientImage
-                src={
-                  (dashboard?.church.logoUrl &&
-                  !dashboard.church.logoUrl.includes('charitas_emblem_crest')
-                    ? dashboard.church.logoUrl
-                    : null) ||
-                  (activeMembership?.churchLogoUrl &&
-                  !activeMembership.churchLogoUrl.includes('charitas_emblem_crest')
-                    ? activeMembership.churchLogoUrl
-                    : null) ||
-                  OFFICIAL_PARISH_LOGO
-                }
-                alt="Logo CHARITAS"
-                className="w-full h-full object-cover"
-              />
-            </div>
+            <ChariteLogoMark
+              logoUrl={
+                (dashboard?.church.logoUrl &&
+                !dashboard.church.logoUrl.includes('charitas_emblem_crest')
+                  ? dashboard.church.logoUrl
+                  : null) ||
+                (activeMembership?.churchLogoUrl &&
+                !activeMembership.churchLogoUrl.includes('charitas_emblem_crest')
+                  ? activeMembership.churchLogoUrl
+                  : null) ||
+                OFFICIAL_PARISH_LOGO
+              }
+              churchName={dashboard?.church.name || activeMembership?.churchName || OFFICIAL_PARISH_NAME}
+              sizeClass="w-12 h-12"
+              motion="card"
+            />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-stone-900 dark:text-white truncate">
                 {dashboard?.church.name || activeMembership?.churchName}
@@ -605,17 +613,35 @@ export const Phase1Workspace: React.FC = () => {
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
-                  <div className="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4">
-                    <div>
-                      <h1 className="font-display text-2xl sm:text-4xl font-semibold text-white">
-                        {dashboard?.church.name || activeMembership?.churchName}
-                      </h1>
-                      <p className="text-xs sm:text-sm text-stone-200 mt-1">
-                        {dashboard?.church.tagline ||
-                          [dashboard?.church.city, dashboard?.church.country]
-                            .filter(Boolean)
-                            .join(' · ')}
-                      </p>
+                  <div className="absolute bottom-4 left-5 right-5 sm:left-6 sm:right-6 flex items-end justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <ChariteLogoMark
+                        logoUrl={
+                          (dashboard?.church.logoUrl &&
+                          !dashboard.church.logoUrl.includes('charitas_emblem_crest')
+                            ? dashboard.church.logoUrl
+                            : null) ||
+                          (activeMembership?.churchLogoUrl &&
+                          !activeMembership.churchLogoUrl.includes('charitas_emblem_crest')
+                            ? activeMembership.churchLogoUrl
+                            : null) ||
+                          OFFICIAL_PARISH_LOGO
+                        }
+                        churchName={dashboard?.church.name || activeMembership?.churchName || OFFICIAL_PARISH_NAME}
+                        sizeClass="w-14 h-14 sm:w-16 sm:h-16"
+                        motion="hero"
+                      />
+                      <div className="min-w-0">
+                        <h1 className="font-display text-2xl sm:text-4xl font-semibold text-white truncate">
+                          {dashboard?.church.name || activeMembership?.churchName}
+                        </h1>
+                        <p className="text-xs sm:text-sm text-stone-200 mt-1 truncate">
+                          {dashboard?.church.tagline ||
+                            [dashboard?.church.city, dashboard?.church.country]
+                              .filter(Boolean)
+                              .join(' · ')}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -934,8 +960,23 @@ export const Phase1Workspace: React.FC = () => {
           />
           <div className="relative w-72 max-w-[85vw] bg-white dark:bg-slate-900 h-full flex flex-col z-10">
             <div className="p-4 border-b border-stone-200 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <Building2 className="w-5 h-5 text-amber-700 shrink-0" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <ChariteLogoMark
+                  logoUrl={
+                    (dashboard?.church.logoUrl &&
+                    !dashboard.church.logoUrl.includes('charitas_emblem_crest')
+                      ? dashboard.church.logoUrl
+                      : null) ||
+                    (activeMembership?.churchLogoUrl &&
+                    !activeMembership.churchLogoUrl.includes('charitas_emblem_crest')
+                      ? activeMembership.churchLogoUrl
+                      : null) ||
+                    OFFICIAL_PARISH_LOGO
+                  }
+                  churchName={activeMembership?.churchName || OFFICIAL_PARISH_NAME}
+                  sizeClass="w-9 h-9"
+                  motion="subtle"
+                />
                 <div className="min-w-0">
                   <span className="block text-[10px] font-extrabold tracking-widest text-[#061A40] dark:text-[#F5B82E] uppercase">
                     CHARITAS

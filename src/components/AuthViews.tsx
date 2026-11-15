@@ -7,6 +7,7 @@ import {
   OFFICIAL_PARISH_NAME,
   POWERED_BY_CREDIT,
 } from '../lib/parishInfo';
+import { ChariteLogoMark } from './landing/ChariteLogoMark';
 import type { PublicChurch } from '../types/platform';
 
 interface AuthViewsProps {
@@ -184,11 +185,12 @@ export const AuthViews: React.FC<AuthViewsProps> = ({
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-7 sm:p-8 shadow-sm">
           <div className="mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <img
-                src={OFFICIAL_PARISH_LOGO}
-                alt={`Emblème ${OFFICIAL_PARISH_NAME}`}
-                className="w-12 h-12 rounded-full object-cover border-2 border-[#F5B82E] bg-white shadow-sm"
+            <div className="flex items-center gap-3.5 mb-4">
+              <ChariteLogoMark
+                logoUrl={OFFICIAL_PARISH_LOGO}
+                churchName={OFFICIAL_PARISH_NAME}
+                sizeClass="w-14 h-14"
+                motion="hero"
               />
               <span className="text-xs font-semibold tracking-wide text-[#1D4ED8] dark:text-[#60A5FA]">
                 {OFFICIAL_PARISH_NAME}

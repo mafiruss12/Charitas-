@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { AuthViews } from './components/AuthViews';
 import { LandingView } from './components/LandingView';
@@ -19,6 +19,9 @@ const AppRouter: React.FC = () => {
       return true;
     }
   });
+  const [postLoginSplashActive, setPostLoginSplashActive] = useState(false);
+  const wasLoadingRef = useRef(true);
+  const prevUserIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!introActive) return;
@@ -29,9 +32,39 @@ const AppRouter: React.FC = () => {
         // ignore storage errors
       }
       setIntroActive(false);
-    }, 950);
+    }, 1150);
     return () => window.clearTimeout(timer);
   }, [introActive]);
+
+  // Detect fresh user login/registration and launch captivating post-login CSS motion splash
+  useEffect(() => {
+    if (loading) {
+      wasLoadingRef.current = true;
+      return;
+    }
+
+    const currentUserId = user?.id ?? null;
+    const justFinishedInitialLoad = wasLoadingRef.current;
+    wasLoadingRef.current = false;
+
+    if (!justFinishedInitialLoad && prevUserIdRef.current === null && currentUserId !== null) {
+      setPostLoginSplashActive(true);
+    }
+
+    if (currentUserId === null) {
+      setPostLoginSplashActive(false);
+    }
+
+    prevUserIdRef.current = currentUserId;
+  }, [loading, user]);
+
+  useEffect(() => {
+    if (!postLoginSplashActive) return;
+    const timer = window.setTimeout(() => {
+      setPostLoginSplashActive(false);
+    }, 1850);
+    return () => window.clearTimeout(timer);
+  }, [postLoginSplashActive]);
 
   const dismissIntro = () => {
     try {
@@ -70,17 +103,30 @@ const AppRouter: React.FC = () => {
     );
   }
 
+  const showSplash = loading || introActive || postLoginSplashActive;
+  const splashVariant: 'boot' | 'login' = postLoginSplashActive ? 'login' : 'boot';
+
   return (
     <>
       <AnimatePresence>
-        {(loading || introActive) && (
+        {showSplash && (
           <SplashScreen
+            variant={splashVariant}
+            userName={postLoginSplashActive ? user?.fullName : undefined}
             message={
-              loading
-                ? 'Vérification de votre session CHARITAS...'
-                : 'Chargement de CHARITAS — Église Saint Louis Roi d’Ebimpé...'
+              postLoginSplashActive
+                ? 'Ouverture de votre espace paroissial CHARITAS...'
+                : loading
+                  ? 'Vérification de votre session CHARITAS...'
+                  : 'Chargement de CHARITAS — Église Saint Louis Roi d’Ebimpé...'
             }
-            onSkip={!loading ? dismissIntro : undefined}
+            onSkip={
+              postLoginSplashActive
+                ? () => setPostLoginSplashActive(false)
+                : !loading
+                  ? dismissIntro
+                  : undefined
+            }
           />
         )}
       </AnimatePresence>

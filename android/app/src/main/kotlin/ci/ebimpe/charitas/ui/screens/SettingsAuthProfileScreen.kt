@@ -62,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import ci.ebimpe.charitas.CharitasAppContainer
 import ci.ebimpe.charitas.BuildConfig
 import ci.ebimpe.charitas.R
+import ci.ebimpe.charitas.ui.components.AnimatedLogoIntensity
+import ci.ebimpe.charitas.ui.components.AnimatedParishLogo
 import ci.ebimpe.charitas.ui.theme.CharitasDeepNavy
 import ci.ebimpe.charitas.ui.theme.CharitasGold
 import ci.ebimpe.charitas.ui.theme.CharitasRoyalNavy
@@ -117,11 +119,28 @@ fun SettingsAuthProfileScreen(
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = if (authMode == 0) "Connexion membre CHARITAS" else "Rejoindre la paroisse",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AnimatedParishLogo(
+                                size = 50.dp,
+                                intensity = AnimatedLogoIntensity.HERO
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (authMode == 0) "Connexion membre CHARITAS" else "Rejoindre la paroisse",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Église Saint Louis Roi d’Ebimpé",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = CharitasRoyalNavy,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             FilterChip(selected = authMode == 0, onClick = { authMode = 0 }, label = { Text("Se connecter", maxLines = 1, softWrap = false) })
                             FilterChip(selected = authMode == 1, onClick = { authMode = 1 }, label = { Text("Créer un compte", maxLines = 1, softWrap = false) })
@@ -330,14 +349,9 @@ fun SettingsAuthProfileScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
-                            contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .border(1.5.dp, CharitasGold, CircleShape)
+                        AnimatedParishLogo(
+                            size = 48.dp,
+                            intensity = AnimatedLogoIntensity.CARD
                         )
                         Column {
                             Text(

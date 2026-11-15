@@ -33,6 +33,7 @@ import type {
 } from '../../types/platform';
 import { fetchLiveFallbackTvCatalog } from '../../lib/fallbackTvCatalog';
 import { ResilientImage } from '../ResilientImage';
+import { ChariteLogoMark } from '../landing/ChariteLogoMark';
 import { HlsVideoPlayer, type PlayerSourceMeta } from './HlsVideoPlayer';
 
 interface ChariteTvHubProps {
@@ -429,24 +430,31 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
       {/* CHARITAS TV Hero Header */}
       <div className="rounded-3xl bg-gradient-to-br from-[#04112B] via-[#061A40] to-[#1D4ED8] text-white p-5 sm:p-6 shadow-[0_18px_50px_-15px_rgba(4,17,43,0.6)]">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#F5B82E]">
-              <Tv className="w-4 h-4" aria-hidden="true" />
-              <span>CHARITAS TV — Église Saint Louis Roi d’Ebimpé</span>
-              {liveCount > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-bold uppercase">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                  {liveCount} direct{liveCount > 1 ? 's' : ''}
-                </span>
-              )}
+          <div className="flex items-start sm:items-center gap-3.5">
+            <ChariteLogoMark
+              churchName="CHARITAS — Église Saint Louis Roi d’Ebimpé"
+              sizeClass="w-12 h-12 sm:w-14 sm:h-14"
+              motion="card"
+            />
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#F5B82E]">
+                <Tv className="w-4 h-4" aria-hidden="true" />
+                <span>CHARITAS TV — Église Saint Louis Roi d’Ebimpé</span>
+                {liveCount > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-bold uppercase">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    {liveCount} direct{liveCount > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                Télévisions chrétiennes en direct &amp; Cultes de la paroisse
+              </h1>
+              <p className="text-xs sm:text-sm text-blue-100/90 max-w-2xl">
+                Accès libre sans inscription : chaînes chrétiennes vérifiées (africaines, francophones,
+                internationales, gospel et enseignements bibliques) avec lecteur adaptatif HLS.
+              </p>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              Télévisions chrétiennes en direct &amp; Cultes de la paroisse
-            </h1>
-            <p className="text-xs sm:text-sm text-blue-100/90 max-w-2xl">
-              Accès libre sans inscription : chaînes chrétiennes vérifiées (africaines, francophones,
-              internationales, gospel et enseignements bibliques) avec lecteur adaptatif HLS.
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">

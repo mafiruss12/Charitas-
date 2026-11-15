@@ -31,7 +31,11 @@ class MainActivity : ComponentActivity() {
             val isOnline by container.repository.isOnline.collectAsState()
             val memberships by container.repository.memberships.collectAsState()
             val activeChurchId by container.repository.activeChurchId.collectAsState()
+            val currentUser by container.repository.currentUser.collectAsState()
             var showSplash by remember { mutableStateOf(true) }
+            var postLoginSplash by remember { mutableStateOf(false) }
+            var sessionBootDone by remember { mutableStateOf(false) }
+            var hadAuthenticatedUser by remember { mutableStateOf(false) }
             var updateInfo by remember { mutableStateOf<AppVersionInfo?>(null) }
 
             val activeMembership = memberships.firstOrNull { it.churchId == activeChurchId } ?: memberships.firstOrNull()
@@ -39,10 +43,20 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 container.bibleImporter.ensureImported()
                 container.repository.restoreSessionIfPresent()
+                hadAuthenticatedUser = container.repository.currentUser.value != null
+                sessionBootDone = true
                 when (val result = InAppUpdateChecker.check()) {
                     is UpdateCheckResult.Available -> updateInfo = result.info
                     else -> Unit
                 }
+            }
+
+            LaunchedEffect(currentUser, sessionBootDone) {
+                if (!sessionBootDone) return@LaunchedEffect
+                if (!hadAuthenticatedUser && currentUser != null) {
+                    postLoginSplash = true
+                }
+                hadAuthenticatedUser = currentUser != null
             }
 
             // Automatically flush offline Outbox queue whenever network returns
@@ -58,7 +72,13 @@ class MainActivity : ComponentActivity() {
                 brandAccentHex = activeMembership?.churchAccentColor
             ) {
                 if (showSplash) {
-                    SplashScreen(onFinished = { showSplash = false })
+                    SplashScreen(isPostLogin = false, onFinished = { showSplash = false })
+                } else if (postLoginSplash) {
+                    SplashScreen(
+                        isPostLogin = true,
+                        userName = currentUser?.fullName,
+                        onFinished = { postLoginSplash = false }
+                    )
                 } else {
                     CharitasRootScaffold(container = container)
                     updateInfo?.let { info ->

@@ -54,6 +54,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ci.ebimpe.charitas.CharitasAppContainer
 import ci.ebimpe.charitas.core.model.OutboxUiState
+import ci.ebimpe.charitas.ui.components.AnimatedLogoIntensity
+import ci.ebimpe.charitas.ui.components.AnimatedParishLogo
 import ci.ebimpe.charitas.ui.components.OfflineStatusBanner
 import ci.ebimpe.charitas.ui.screens.AdminChurchScreen
 import ci.ebimpe.charitas.ui.screens.BibleScreen
@@ -119,14 +121,9 @@ fun CharitasRootScaffold(container: CharitasAppContainer) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
-                                contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .border(1.dp, CharitasGold, CircleShape)
+                            AnimatedParishLogo(
+                                size = 34.dp,
+                                intensity = AnimatedLogoIntensity.SUBTLE
                             )
                             Column {
                                 Text(

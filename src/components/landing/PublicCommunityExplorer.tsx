@@ -220,6 +220,7 @@ export const PublicCommunityExplorer: React.FC<PublicCommunityExplorerProps> = (
               logoUrl={selectedChurch?.logoUrl}
               churchName={selectedChurch?.name || 'CHARITAS — Église Saint Louis Roi d’Ebimpé'}
               sizeClass="w-9 h-9"
+              motion="subtle"
             />
             <div className="min-w-0">
               <h2 className="text-sm sm:text-base font-bold truncate">

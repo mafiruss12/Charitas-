@@ -85,6 +85,8 @@ import ci.ebimpe.charitas.core.database.BibleVerseEntity
 import ci.ebimpe.charitas.core.model.PublicShowcaseResponseDto
 import ci.ebimpe.charitas.core.network.VisitorContactRequest
 import ci.ebimpe.charitas.data.sync.RepoResult
+import ci.ebimpe.charitas.ui.components.AnimatedLogoIntensity
+import ci.ebimpe.charitas.ui.components.AnimatedParishLogo
 import ci.ebimpe.charitas.ui.theme.CharitasAmber
 import ci.ebimpe.charitas.ui.theme.CharitasBurgundy
 import ci.ebimpe.charitas.ui.theme.CharitasDeepNavy
@@ -171,14 +173,9 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
-                                contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .border(1.5.dp, CharitasGold, CircleShape)
+                            AnimatedParishLogo(
+                                size = 48.dp,
+                                intensity = AnimatedLogoIntensity.HERO
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
@@ -534,14 +531,9 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
-                            contentDescription = "Emblème Paroisse Saint Louis Roi d’Ebimpé",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .border(1.5.dp, CharitasGold, CircleShape)
+                        AnimatedParishLogo(
+                            size = 38.dp,
+                            intensity = AnimatedLogoIntensity.CARD
                         )
                         Surface(
                             shape = RoundedCornerShape(50),
@@ -802,14 +794,9 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
-                            contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .border(1.5.dp, CharitasGold, CircleShape)
+                        AnimatedParishLogo(
+                            size = 52.dp,
+                            intensity = AnimatedLogoIntensity.HERO
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(

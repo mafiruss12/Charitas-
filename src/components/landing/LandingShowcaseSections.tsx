@@ -637,6 +637,7 @@ export const LandingShowcaseSections: React.FC<LandingShowcaseSectionsProps> = (
                           logoUrl={church.logoUrl}
                           churchName={church.name}
                           sizeClass="w-10 h-10"
+                          motion="subtle"
                         />
                         <div className="min-w-0">
                           <h4 className="text-sm font-bold text-white truncate">{church.name}</h4>
@@ -710,7 +711,8 @@ export const LandingShowcaseSections: React.FC<LandingShowcaseSectionsProps> = (
                 <ChariteLogoMark
                   logoUrl={featured?.logoUrl}
                   churchName={featured?.name || 'CHARITAS — Église Saint Louis Roi d’Ebimpé'}
-                  sizeClass="w-10 h-10"
+                  sizeClass="w-11 h-11"
+                  motion="card"
                 />
                 <div>
                   <p className="text-base sm:text-lg font-bold text-white">

@@ -20,6 +20,7 @@ import {
 } from '../lib/parishInfo';
 import type { PublicShowcaseResponse, ThemeMode } from '../types/platform';
 import { ResilientImage } from './ResilientImage';
+import { ChariteLogoMark } from './landing/ChariteLogoMark';
 import { LandingNavbar } from './landing/LandingNavbar';
 import { LandingShowcaseSections } from './landing/LandingShowcaseSections';
 import { PublicCommunityExplorer, type ExplorerTab } from './landing/PublicCommunityExplorer';
@@ -238,8 +239,25 @@ export const LandingView: React.FC<LandingViewProps> = ({
                 </div>
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#061A40]/45 via-transparent to-transparent"
+                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#061A40]/55 via-transparent to-transparent"
                 />
+                {/* Captivating Animated Parish Emblem Medallion */}
+                <div className="absolute bottom-4 left-4 flex items-center gap-3 rounded-2xl bg-[#04112B]/80 backdrop-blur-md border border-[#F5B82E]/40 px-3.5 py-2.5 shadow-xl">
+                  <ChariteLogoMark
+                    logoUrl={featuredChurch?.logoUrl}
+                    churchName={OFFICIAL_PARISH_NAME}
+                    sizeClass="w-12 h-12 sm:w-14 sm:h-14"
+                    motion="hero"
+                  />
+                  <div className="min-w-0 pr-1">
+                    <p className="text-[10px] font-bold tracking-[0.14em] text-[#F5B82E] uppercase">
+                      Paroisse officielle
+                    </p>
+                    <p className="text-xs sm:text-sm font-bold text-white leading-tight truncate">
+                      Saint Louis Roi d’Ebimpé
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -339,10 +357,11 @@ export const LandingView: React.FC<LandingViewProps> = ({
             <div className="lg:col-span-4">
               <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 sm:p-7 shadow-[0_18px_50px_-15px_rgba(15,23,42,0.12)] space-y-5">
                 <div className="flex items-center gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-800">
-                  <img
-                    src={OFFICIAL_PARISH_LOGO}
-                    alt={OFFICIAL_PARISH_NAME}
-                    className="w-14 h-14 rounded-full object-cover border-2 border-[#F5B82E] bg-white shrink-0 shadow-sm"
+                  <ChariteLogoMark
+                    logoUrl={featuredChurch?.logoUrl || OFFICIAL_PARISH_LOGO}
+                    churchName={OFFICIAL_PARISH_NAME}
+                    sizeClass="w-14 h-14"
+                    motion="card"
                   />
                   <div className="min-w-0">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-[#1D4ED8] dark:text-[#60A5FA]">
@@ -393,10 +412,11 @@ export const LandingView: React.FC<LandingViewProps> = ({
           >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200/80 dark:border-slate-800">
               <div className="flex items-center gap-4">
-                <img
-                  src={OFFICIAL_PARISH_LOGO}
-                  alt={OFFICIAL_PARISH_NAME}
-                  className="w-16 h-16 rounded-full object-cover border-2 border-[#F5B82E] bg-white shadow-md shrink-0"
+                <ChariteLogoMark
+                  logoUrl={featuredChurch?.logoUrl || OFFICIAL_PARISH_LOGO}
+                  churchName={OFFICIAL_PARISH_NAME}
+                  sizeClass="w-16 h-16"
+                  motion="hero"
                 />
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-[#1D4ED8] dark:text-[#60A5FA]">

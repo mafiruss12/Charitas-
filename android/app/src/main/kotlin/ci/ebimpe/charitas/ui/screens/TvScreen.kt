@@ -64,6 +64,8 @@ import ci.ebimpe.charitas.R
 import ci.ebimpe.charitas.core.model.PublicTvCatalogResponseDto
 import ci.ebimpe.charitas.core.model.TvChannelDto
 import ci.ebimpe.charitas.data.sync.RepoResult
+import ci.ebimpe.charitas.ui.components.AnimatedLogoIntensity
+import ci.ebimpe.charitas.ui.components.AnimatedParishLogo
 import ci.ebimpe.charitas.ui.components.CharitasMediaPlayer
 import ci.ebimpe.charitas.ui.theme.CharitasBurgundy
 import ci.ebimpe.charitas.ui.theme.CharitasDeepNavy
@@ -150,13 +152,9 @@ fun TvScreen(container: CharitasAppContainer) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
-                        contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
+                    AnimatedParishLogo(
+                        size = 40.dp,
+                        intensity = AnimatedLogoIntensity.CARD
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {

@@ -50,7 +50,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({
           }}
           className="inline-flex items-center gap-2.5 min-w-0 shrink-0 group"
         >
-          <ChariteLogoMark logoUrl={logoUrl} churchName={churchName} sizeClass="w-10 h-10 xl:w-11 xl:h-11" />
+          <ChariteLogoMark logoUrl={logoUrl} churchName={churchName} sizeClass="w-10 h-10 xl:w-11 xl:h-11" motion="card" />
           <div className="min-w-0">
             <span className="block text-sm sm:text-base xl:text-lg font-extrabold tracking-tight text-white leading-tight truncate max-w-[195px] sm:max-w-[260px] xl:max-w-[320px]">
               CHARITAS <span className="text-[#F5B82E] font-semibold">· St Louis Roi d’Ebimpé</span>

@@ -1,5 +1,7 @@
 package ci.ebimpe.charitas.ui.screens
 
+import ci.ebimpe.charitas.ui.components.AnimatedLogoIntensity
+import ci.ebimpe.charitas.ui.components.AnimatedParishLogo
 import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -167,14 +169,9 @@ fun BibleScreen(container: CharitasAppContainer) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
-                    contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .border(1.dp, CharitasGold, CircleShape)
+                AnimatedParishLogo(
+                    size = 38.dp,
+                    intensity = AnimatedLogoIntensity.CARD
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
