@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.ebimpe.charitas.R
@@ -63,7 +64,7 @@ import kotlinx.coroutines.launch
 sealed class CharitasRoute(val route: String, val label: String, val icon: ImageVector) {
     data object Home : CharitasRoute("home", "Accueil", Icons.Rounded.Home)
     data object Bible : CharitasRoute("bible", "Bible", Icons.Rounded.AutoStories)
-    data object Social : CharitasRoute("social", "Communauté", Icons.Rounded.Forum)
+    data object Social : CharitasRoute("social", "Échanges", Icons.Rounded.Forum)
     data object Tv : CharitasRoute("tv", "TV", Icons.Rounded.LiveTv)
     data object Events : CharitasRoute("events", "Actions", Icons.Rounded.VolunteerActivism)
     data object Messaging : CharitasRoute("messaging", "Messages", Icons.Rounded.MailOutline)
@@ -131,7 +132,9 @@ fun CharitasRootScaffold(container: CharitasAppContainer) {
                                     text = "Saint Louis Roi d’Ebimpé",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = CharitasGold,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -163,7 +166,15 @@ fun CharitasRootScaffold(container: CharitasAppContainer) {
                     val selected = currentDestination?.hierarchy?.any { it.route == tab.route } == true
                     NavigationBarItem(
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label, maxLines = 1) },
+                        label = {
+                            Text(
+                                text = tab.label,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
                         selected = selected,
                         onClick = { navigateSingleTop(tab.route) },
                         colors = NavigationBarItemDefaults.colors(

@@ -3,12 +3,18 @@ package ci.ebimpe.charitas.core.network
 import ci.ebimpe.charitas.core.security.TokenProvider
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Response
 import retrofit2.Retrofit
+import java.io.IOException
 import java.util.concurrent.TimeUnit
+
+class ApiFormatException(message: String) : IOException(message)
 
 object NetworkClientFactory {
 
@@ -16,6 +22,14 @@ object NetworkClientFactory {
         ignoreUnknownKeys = true
         coerceInputValues = true
         isLenient = true
+    }
+
+    fun isAllowedApiBaseUrl(url: String): Boolean {
+        val trimmed = url.trim().lowercase()
+        return trimmed.startsWith("https://") ||
+            trimmed.startsWith("http://localhost") ||
+            trimmed.startsWith("http://127.0.0.1") ||
+            trimmed.startsWith("http://10.0.2.2")
     }
 
     fun buildOkHttpClient(
@@ -34,7 +48,25 @@ object NetworkClientFactory {
                 if (!token.isNullOrBlank()) {
                     reqBuilder.header("Authorization", "Bearer $token")
                 }
-                chain.proceed(reqBuilder.build())
+                val response = chain.proceed(reqBuilder.build())
+                val contentType = response.header("Content-Type")?.lowercase().orEmpty()
+                val body = response.body
+                if (body != null && body.contentLength() != 0L) {
+                    val peeked = runCatching { body.peekBody(256).string().trimStart() }.getOrDefault("")
+                    val looksHtml = peeked.startsWith("<") ||
+                        peeked.startsWith("<!doctype", ignoreCase = true) ||
+                        contentType.contains("text/html")
+                    val nonJson2xx = response.isSuccessful &&
+                        contentType.isNotBlank() &&
+                        !contentType.contains("json")
+                    if (looksHtml || nonJson2xx) {
+                        response.close()
+                        throw ApiFormatException(
+                            "Serveur API temporairement indisponible ou mal configuré (réponse non-JSON reçue)."
+                        )
+                    }
+                }
+                response
             }
 
         if (enableLogging) {
@@ -50,7 +82,11 @@ object NetworkClientFactory {
         baseUrl: String,
         okHttpClient: OkHttpClient
     ): CharitasApiService {
-        val normalizedBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val trimmed = baseUrl.trim()
+        require(isAllowedApiBaseUrl(trimmed)) {
+            "L'URL du serveur API doit utiliser HTTPS (hors émulateur local)."
+        }
+        val normalizedBaseUrl = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
         return Retrofit.Builder()
             .baseUrl(normalizedBaseUrl)
             .client(okHttpClient)
@@ -60,13 +96,15 @@ object NetworkClientFactory {
     }
 
     fun parseErrorMessage(response: Response<*>): String {
-        val raw = runCatching { response.errorBody()?.string() }.getOrNull().orEmpty()
-        return if (raw.contains("\"error\"")) {
-            raw.substringAfter("\"error\"").substringAfter(":\"")
-                .substringBefore("\"")
-                .ifBlank { "Erreur serveur (${response.code()})." }
-        } else {
-            "Requête refusée (${response.code()})."
+        val raw = runCatching { response.errorBody()?.string() }.getOrNull().orEmpty().trim()
+        if (raw.isBlank() || raw.startsWith("<")) {
+            return "Service serveur temporairement indisponible (${response.code()})."
         }
+        val jsonError = runCatching {
+            val obj = jsonSerializer.parseToJsonElement(raw).jsonObject
+            obj["error"]?.jsonPrimitive?.contentOrNull
+                ?: obj["message"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
+        return jsonError?.takeIf { it.isNotBlank() } ?: "Requête refusée (${response.code()})."
     }
 }

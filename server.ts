@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authRouter } from './src/routes/auth.ts';
@@ -20,6 +21,7 @@ import { tvRouter } from './src/routes/tv.ts';
 import { startPeriodicStreamHealthMonitor } from './src/lib/iptv.ts';
 import { createRateLimiter } from './src/middleware/rateLimit.ts';
 import { attachWebSocketServer } from './src/realtime/ws.ts';
+import { pool } from './src/db/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,6 +81,15 @@ export function createApp() {
     res.status(404).json({ error: 'Route API introuvable.' });
   });
 
+  // Ensure API errors always return JSON (never Express default HTML stack pages)
+  app.use('/api', (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (err instanceof SyntaxError && 'status' in err && (err as { status?: number }).status === 400) {
+      return res.status(400).json({ error: 'Corps JSON invalide.' });
+    }
+    console.error('Unhandled API error:', err);
+    return res.status(500).json({ error: 'Erreur interne du serveur.' });
+  });
+
   return app;
 }
 
@@ -90,10 +101,14 @@ async function startServer() {
 
   if (process.env.NODE_ENV === 'production') {
     const distPath = path.join(__dirname, 'dist');
+    const indexHtmlPath = path.join(distPath, 'index.html');
+    if (!fs.existsSync(indexHtmlPath)) {
+      throw new Error('Build frontend introuvable (dist/index.html). Exécutez `npm run build` avant `npm start`.');
+    }
     app.use('/src/assets/images', express.static(path.join(__dirname, 'src/assets/images')));
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      res.sendFile(indexHtmlPath);
     });
   } else {
     const { createServer: createViteServer } = await import('vite');
@@ -111,6 +126,18 @@ async function startServer() {
     console.log(`Charitas — Église Saint Louis Roi d'Ebimpé server listening on http://0.0.0.0:${port}`);
   });
   startPeriodicStreamHealthMonitor();
+
+  const shutdown = (signal: string) => {
+    console.log(`Received ${signal}, shutting down gracefully...`);
+    server.closeAllConnections?.();
+    server.close(async () => {
+      await pool.end().catch(() => {});
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 2000).unref();
+  };
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
 }
 
 // Only bind HTTP listener when executed as entrypoint, not when imported in tests

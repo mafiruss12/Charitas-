@@ -50,7 +50,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.ebimpe.charitas.CharitasAppContainer
@@ -190,16 +191,17 @@ fun BibleScreen(container: CharitasAppContainer) {
             }
         }
 
-        TabRow(
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
             containerColor = CharitasDeepNavy,
-            contentColor = CharitasGold
+            contentColor = CharitasGold,
+            edgePadding = 8.dp
         ) {
             listOf("Lecture", "Recherche", "Favoris/Notes", "Plans", "Méditations").forEachIndexed { idx, label ->
                 Tab(
                     selected = selectedTab == idx,
                     onClick = { selectedTab = idx },
-                    text = { Text(label, maxLines = 1, fontWeight = FontWeight.SemiBold) },
+                    text = { Text(label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold) },
                     selectedContentColor = CharitasGold,
                     unselectedContentColor = Color.White.copy(alpha = 0.7f)
                 )
@@ -231,7 +233,7 @@ fun BibleScreen(container: CharitasAppContainer) {
                             FilterChip(
                                 selected = testamentFilter == code,
                                 onClick = { testamentFilter = code },
-                                label = { Text(title) }
+                                label = { Text(title, maxLines = 1, softWrap = false) }
                             )
                         }
                     }
@@ -251,7 +253,7 @@ fun BibleScreen(container: CharitasAppContainer) {
                                     selectedBook = b
                                     selectedChapter = 1
                                 },
-                                label = { Text(b.nameFr) }
+                                label = { Text(b.nameFr, maxLines = 1, softWrap = false) }
                             )
                         }
                     }
@@ -265,7 +267,7 @@ fun BibleScreen(container: CharitasAppContainer) {
                                 FilterChip(
                                     selected = selectedChapter == ch,
                                     onClick = { selectedChapter = ch },
-                                    label = { Text("Ch. $ch") }
+                                    label = { Text("Ch. $ch", maxLines = 1, softWrap = false) }
                                 )
                             }
                         }

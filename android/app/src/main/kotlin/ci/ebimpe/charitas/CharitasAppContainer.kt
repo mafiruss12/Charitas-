@@ -41,6 +41,7 @@ class CharitasAppContainer(context: Context) {
         db = database,
         sessionVault = sessionVault,
         networkMonitor = networkMonitor,
-        webSocketClient = webSocketClient
+        webSocketClient = webSocketClient,
+        isBackendConfigured = BuildConfig.IS_BACKEND_CONFIGURED
     )
 }

@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,10 +7,30 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val apiBaseUrl = (project.findProperty("CHARITAS_API_BASE_URL") as String?)
-    ?: "https://ais-pre-me5vci35n2h2uqqtli4572-274830859723.europe-west1.run.app"
-val debugApiBaseUrl = (project.findProperty("CHARITAS_DEBUG_API_BASE_URL") as String?)
-    ?: "https://ais-dev-me5vci35n2h2uqqtli4572-274830859723.europe-west1.run.app"
+fun resolveBackendUrl(propName: String, fallback: String = ""): String {
+    val fromProp = (project.findProperty(propName) as String?)?.trim().orEmpty()
+    val fromEnv = System.getenv(propName)?.trim().orEmpty()
+    return fromProp.ifBlank { fromEnv }.ifBlank { fallback }.trimEnd('/')
+}
+
+val apiBaseUrl = resolveBackendUrl("CHARITAS_API_BASE_URL")
+val debugApiBaseUrl = resolveBackendUrl("CHARITAS_DEBUG_API_BASE_URL", apiBaseUrl)
+val isReleaseBackendConfigured = apiBaseUrl.startsWith("https://")
+val isDebugBackendConfigured = debugApiBaseUrl.startsWith("https://") ||
+    debugApiBaseUrl.startsWith("http://10.0.2.2") ||
+    debugApiBaseUrl.startsWith("http://localhost") ||
+    debugApiBaseUrl.startsWith("http://127.0.0.1")
+
+val signingKeystorePath = System.getenv("SIGNING_KEYSTORE_PATH")?.trim().orEmpty()
+val signingKeystorePassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")?.trim().orEmpty()
+val signingKeyAlias = System.getenv("SIGNING_KEY_ALIAS")?.trim().orEmpty()
+val signingKeyPassword = System.getenv("SIGNING_KEY_PASSWORD")?.trim().orEmpty()
+val allowDebugSigningForRelease = System.getenv("CI_ALLOW_DEBUG_SIGNING_FOR_RELEASE") == "true"
+val hasReleaseSigning = signingKeystorePath.isNotBlank() &&
+    File(signingKeystorePath).exists() &&
+    signingKeystorePassword.isNotBlank() &&
+    signingKeyAlias.isNotBlank() &&
+    signingKeyPassword.isNotBlank()
 
 android {
     namespace = "ci.ebimpe.charitas"
@@ -18,23 +40,43 @@ android {
         applicationId = "ci.ebimpe.charitas"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = File(signingKeystorePath)
+                storePassword = signingKeystorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
+        }
     }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
-            buildConfigField("String", "API_BASE_URL", "\"$debugApiBaseUrl\"")
+            val effectiveDebugUrl = if (isDebugBackendConfigured) debugApiBaseUrl else "https://offline.charitas.local"
+            buildConfigField("String", "API_BASE_URL", "\"$effectiveDebugUrl\"")
+            buildConfigField("boolean", "IS_BACKEND_CONFIGURED", isDebugBackendConfigured.toString())
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            val effectiveReleaseUrl = if (isReleaseBackendConfigured) apiBaseUrl else "https://offline.charitas.local"
+            buildConfigField("String", "API_BASE_URL", "\"$effectiveReleaseUrl\"")
+            buildConfigField("boolean", "IS_BACKEND_CONFIGURED", isReleaseBackendConfigured.toString())
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            } else if (allowDebugSigningForRelease) {
+                signingConfig = signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

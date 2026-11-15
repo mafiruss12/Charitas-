@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -59,6 +61,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.ebimpe.charitas.CharitasAppContainer
@@ -78,6 +81,7 @@ import ci.ebimpe.charitas.ui.theme.CharitasGold
 import ci.ebimpe.charitas.ui.theme.CharitasRoyalNavy
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EventsSolidarityScreen(
     container: CharitasAppContainer,
@@ -191,7 +195,7 @@ fun EventsSolidarityScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Événements & QR", fontWeight = FontWeight.SemiBold)
+                        Text("Événements", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                     }
                 },
                 selectedContentColor = CharitasGold,
@@ -204,7 +208,7 @@ fun EventsSolidarityScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.VolunteerActivism, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Solidarité", fontWeight = FontWeight.SemiBold)
+                        Text("Solidarité", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                     }
                 },
                 selectedContentColor = CharitasGold,
@@ -217,7 +221,7 @@ fun EventsSolidarityScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.PlayCircle, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Replays", fontWeight = FontWeight.SemiBold)
+                        Text("Replays", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                     }
                 },
                 selectedContentColor = CharitasGold,
@@ -282,15 +286,17 @@ fun EventsSolidarityScreen(
                                     color = MaterialTheme.colorScheme.secondary
                                 )
 
-                                Row(
+                                FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.padding(top = 4.dp)
                                 ) {
                                     if (currentUser == null) {
                                         OutlinedButton(
                                             onClick = onOpenAuth,
-                                            shape = RoundedCornerShape(50)
-                                        ) { Text("Se connecter pour s'inscrire") }
+                                            shape = RoundedCornerShape(50),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                                        ) { Text("Se connecter pour s'inscrire", maxLines = 1, softWrap = false) }
                                     } else if (ev.myRegistration == null) {
                                         Button(
                                             enabled = isOnline,
@@ -302,29 +308,32 @@ fun EventsSolidarityScreen(
                                                 }
                                             },
                                             shape = RoundedCornerShape(50),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = CharitasGold,
                                                 contentColor = CharitasDeepNavy
                                             )
-                                        ) { Text("S'inscrire (Billet QR)", fontWeight = FontWeight.Bold) }
+                                        ) { Text("S'inscrire (Billet QR)", fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false) }
                                     } else {
                                         OutlinedButton(
                                             onClick = { selectedQrEvent = ev },
-                                            shape = RoundedCornerShape(50)
+                                            shape = RoundedCornerShape(50),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                                         ) {
                                             Icon(Icons.Rounded.QrCode2, contentDescription = null, tint = CharitasRoyalNavy)
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Mon billet QR", fontWeight = FontWeight.Bold)
+                                            Text("Mon billet QR", fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                                         }
                                     }
                                     if (canManageEvents) {
                                         OutlinedButton(
                                             onClick = { checkinTargetEvent = ev },
-                                            shape = RoundedCornerShape(50)
+                                            shape = RoundedCornerShape(50),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                                         ) {
                                             Icon(Icons.Rounded.QrCodeScanner, contentDescription = null)
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Valider QR")
+                                            Text("Valider QR", maxLines = 1, softWrap = false)
                                         }
                                     }
                                 }

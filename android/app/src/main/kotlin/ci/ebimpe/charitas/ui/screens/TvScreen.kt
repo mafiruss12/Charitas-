@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ci.ebimpe.charitas.CharitasAppContainer
@@ -63,6 +64,7 @@ import ci.ebimpe.charitas.core.model.PublicTvCatalogResponseDto
 import ci.ebimpe.charitas.core.model.TvChannelDto
 import ci.ebimpe.charitas.data.sync.RepoResult
 import ci.ebimpe.charitas.ui.components.CharitasMediaPlayer
+import ci.ebimpe.charitas.ui.theme.CharitasBurgundy
 import ci.ebimpe.charitas.ui.theme.CharitasDeepNavy
 import ci.ebimpe.charitas.ui.theme.CharitasGold
 import ci.ebimpe.charitas.ui.theme.CharitasRoyalNavy
@@ -242,7 +244,7 @@ fun TvScreen(container: CharitasAppContainer) {
                         FilterChip(
                             selected = selectedCategory == cat,
                             onClick = { selectedCategory = cat },
-                            label = { Text(cat) }
+                            label = { Text(cat, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
                         )
                     }
                 }

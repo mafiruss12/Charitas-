@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -75,6 +77,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -103,6 +106,7 @@ import ci.ebimpe.charitas.ui.theme.CharitasRoyalNavy
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SocialScreen(
     container: CharitasAppContainer,
@@ -310,7 +314,7 @@ fun SocialScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Newspaper, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Fil d’actualité", fontWeight = FontWeight.SemiBold)
+                            Text("Actualités", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                         }
                     },
                     selectedContentColor = CharitasGold,
@@ -323,7 +327,7 @@ fun SocialScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Movie, contentDescription = null, modifier = Modifier.size(16.dp), tint = CharitasBurgundy)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Reels TikTok", fontWeight = FontWeight.Bold, color = CharitasGold)
+                            Text("Reels", fontWeight = FontWeight.Bold, color = CharitasGold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                         }
                     },
                     selectedContentColor = CharitasGold,
@@ -336,7 +340,7 @@ fun SocialScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Groupes", fontWeight = FontWeight.SemiBold)
+                            Text("Groupes", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                         }
                     },
                     selectedContentColor = CharitasGold,
@@ -367,7 +371,7 @@ fun SocialScreen(
                             FilterChip(
                                 selected = selectedType == key,
                                 onClick = { selectedType = key },
-                                label = { Text(label) }
+                                label = { Text(label, maxLines = 1, softWrap = false) }
                             )
                         }
                     }
@@ -407,12 +411,13 @@ fun SocialScreen(
                                     Button(
                                         onClick = onOpenAuth,
                                         shape = RoundedCornerShape(50),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = CharitasGold,
                                             contentColor = CharitasDeepNavy
                                         )
                                     ) {
-                                        Text("Connexion", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        Text("Connexion", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
                                     }
                                 }
                             }
@@ -585,7 +590,7 @@ fun SocialScreen(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Amen (${post.likesCount})", color = CharitasBurgundy, fontWeight = FontWeight.Bold)
+                                            Text("Amen (${post.likesCount})", color = CharitasBurgundy, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                                         }
 
                                         TextButton(onClick = { commentsPost = post }) {
@@ -1010,9 +1015,9 @@ fun SocialScreen(
             title = { Text("Publier dans la communauté") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("text" to "Texte", "photo" to "Photo", "short_video" to "Vidéo (Reel)").forEach { (t, lbl) ->
-                            FilterChip(selected = postType == t, onClick = { postType = t }, label = { Text(lbl) })
+                            FilterChip(selected = postType == t, onClick = { postType = t }, label = { Text(lbl, maxLines = 1, softWrap = false) })
                         }
                     }
                     OutlinedTextField(

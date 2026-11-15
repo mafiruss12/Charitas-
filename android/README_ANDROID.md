@@ -29,8 +29,8 @@ Application Android native développée en **Kotlin**, **Jetpack Compose**, **Ma
 ### Configuration des URLs backend (`android/gradle.properties`)
 
 ```properties
-CHARITAS_API_BASE_URL=https://ais-pre-me5vci35n2h2uqqtli4572-274830859723.europe-west1.run.app
-CHARITAS_DEBUG_API_BASE_URL=https://ais-dev-me5vci35n2h2uqqtli4572-274830859723.europe-west1.run.app
+CHARITAS_API_BASE_URL=https://votre-backend-production.example.com
+CHARITAS_DEBUG_API_BASE_URL=https://votre-backend-staging.example.com
 ```
 
 Aucune clé secrète, mot de passe ou jeton n'est intégré dans le code source Android.

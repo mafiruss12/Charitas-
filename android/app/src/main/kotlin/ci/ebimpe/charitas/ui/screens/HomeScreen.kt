@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,7 +46,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,6 +74,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -89,6 +91,7 @@ import ci.ebimpe.charitas.ui.theme.CharitasGold
 import ci.ebimpe.charitas.ui.theme.CharitasRoyalNavy
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     container: CharitasAppContainer,
@@ -110,6 +113,7 @@ fun HomeScreen(
     var offlineVerse by remember { mutableStateOf<BibleVerseEntity?>(null) }
     var showContactDialog by remember { mutableStateOf(false) }
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
+    var syncNotice by remember { mutableStateOf<String?>(null) }
 
     suspend fun reload() {
         loading = true
@@ -118,9 +122,10 @@ fun HomeScreen(
             is RepoResult.Success -> {
                 showcase = res.data
                 fromCache = res.fromCache
+                syncNotice = if (res.fromCache) "Affichage depuis le cache local hors connexion." else null
             }
             is RepoResult.Error -> {
-                feedbackMessage = res.message
+                syncNotice = res.message
             }
         }
         container.repository.syncSpiritualForVisitorAndMember(churchId)
@@ -185,7 +190,9 @@ fun HomeScreen(
                                     text = "ÉGLISE SAINT LOUIS ROI D’EBIMPÉ",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = CharitasGold,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -280,6 +287,7 @@ fun HomeScreen(
                             onClick = onOpenAuth,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(50),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = CharitasGold,
                                 contentColor = Color(0xFF061A40)
@@ -292,9 +300,12 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Rejoindre notre communauté",
+                                text = if (currentUser == null) "Rejoindre notre communauté" else "Mon espace paroissial",
                                 fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
@@ -312,6 +323,7 @@ fun HomeScreen(
                                 onClick = onOpenTv,
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(50),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, CharitasGold.copy(alpha = 0.7f)),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     containerColor = Color(0xFF04112B).copy(alpha = 0.7f),
@@ -320,13 +332,21 @@ fun HomeScreen(
                             ) {
                                 Icon(Icons.Rounded.LiveTv, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("CHARITAS TV", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text(
+                                    text = "CHARITAS TV",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
 
                             Button(
                                 onClick = { showContactDialog = true },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(50),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color.White.copy(alpha = 0.15f),
                                     contentColor = Color.White
@@ -334,17 +354,55 @@ fun HomeScreen(
                             ) {
                                 Icon(Icons.Rounded.Email, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Contact", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text(
+                                    text = "Contact",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
 
-                    if (fromCache) {
+                    val statusText = syncNotice ?: if (fromCache) "Affichage depuis le cache local hors connexion." else null
+                    statusText?.let { notice ->
                         Text(
-                            text = "Affichage depuis le cache local hors connexion.",
+                            text = notice,
                             style = MaterialTheme.typography.labelSmall,
                             color = CharitasGold
                         )
+                    }
+                }
+            }
+        }
+
+        feedbackMessage?.let { msg ->
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { feedbackMessage = null }) {
+                            Text("OK", maxLines = 1, softWrap = false)
+                        }
                     }
                 }
             }
@@ -543,12 +601,12 @@ fun HomeScreen(
         // ==================== 4. VERSET DU JOUR (CRAMPON 1923 · HORS LIGNE) ====================
         offlineVerse?.let { verse ->
             item {
-                ElevatedCard(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.elevatedCardColors(
+                    colors = CardDefaults.cardColors(
                         containerColor = Color(0xFF04112B)
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -598,7 +656,7 @@ fun HomeScreen(
                                 onClick = onOpenBible,
                                 colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
                             ) {
-                                Text("Lire dans la Bible", fontWeight = FontWeight.SemiBold)
+                                Text("Lire dans la Bible", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Icon(Icons.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp))
                             }
@@ -677,6 +735,8 @@ fun HomeScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color(0xFF1D4ED8),
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
@@ -757,10 +817,13 @@ fun HomeScreen(
                                 phone = phone.trim().ifBlank { null },
                                 message = msg.trim()
                             )
-                            runCatching { container.apiService.submitVisitorContact(req) }
+                            val result = container.repository.submitVisitorContact(req)
                             sending = false
                             showContactDialog = false
-                            feedbackMessage = "Votre message a été transmis à la paroisse."
+                            feedbackMessage = when (result) {
+                                is RepoResult.Success -> result.data
+                                is RepoResult.Error -> result.message
+                            }
                         }
                     }
                 ) {

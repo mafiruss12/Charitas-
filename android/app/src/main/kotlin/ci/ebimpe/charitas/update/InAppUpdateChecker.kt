@@ -60,7 +60,11 @@ object InAppUpdateChecker {
                     else -> UpdateCheckResult.UpToDate
                 }
             } catch (e: Exception) {
-                UpdateCheckResult.Error(e.message ?: "Impossible de vérifier les mises à jour.")
+                val safeMsg = when {
+                    e.message?.contains("<") == true -> "Manifest de mise à jour invalide."
+                    else -> "Impossible de vérifier les mises à jour pour le moment."
+                }
+                UpdateCheckResult.Error(safeMsg)
             }
         }
 
@@ -74,7 +78,11 @@ object InAppUpdateChecker {
         try {
             val code = conn.responseCode
             if (code !in 200..299) error("Manifest HTTP $code")
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val contentType = conn.contentType?.lowercase().orEmpty()
+            val body = conn.inputStream.bufferedReader().use { it.readText() }.trim()
+            if (body.startsWith("<") || (contentType.isNotBlank() && !contentType.contains("json") && !contentType.contains("text/plain"))) {
+                error("Réponse non-JSON reçue pour le manifest.")
+            }
             val json = JSONObject(body)
             return AppVersionInfo(
                 versionCode = json.optInt("versionCode", 0),

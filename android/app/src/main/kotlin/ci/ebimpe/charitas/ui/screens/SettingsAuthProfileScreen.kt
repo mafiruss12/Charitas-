@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -53,6 +55,7 @@ import ci.ebimpe.charitas.notifications.CharitasNotificationHelper
 import ci.ebimpe.charitas.notifications.DailyReminderWorker
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsAuthProfileScreen(
     container: CharitasAppContainer,
@@ -97,9 +100,9 @@ fun SettingsAuthProfileScreen(
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(selected = authMode == 0, onClick = { authMode = 0 }, label = { Text("Se connecter") })
-                            FilterChip(selected = authMode == 1, onClick = { authMode = 1 }, label = { Text("Créer un compte") })
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FilterChip(selected = authMode == 0, onClick = { authMode = 0 }, label = { Text("Se connecter", maxLines = 1, softWrap = false) })
+                            FilterChip(selected = authMode == 1, onClick = { authMode = 1 }, label = { Text("Créer un compte", maxLines = 1, softWrap = false) })
                         }
                         if (authMode == 1) {
                             OutlinedTextField(value = fullName, onValueChange = { fullName = it }, label = { Text("Nom complet*") }, modifier = Modifier.fillMaxWidth())
@@ -161,7 +164,7 @@ fun SettingsAuthProfileScreen(
                         OutlinedTextField(value = editCity, onValueChange = { editCity = it }, label = { Text("Ville / Quartier") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = editBio, onValueChange = { editBio = it }, label = { Text("Présentation") }, modifier = Modifier.fillMaxWidth())
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
                                 scope.launch {
                                     feedback = when (val r = container.repository.updateProfile(editName, editPhone.ifBlank { null }, editCity.ifBlank { null }, editBio.ifBlank { null })) {
@@ -169,8 +172,8 @@ fun SettingsAuthProfileScreen(
                                         is RepoResult.Error -> r.message
                                     }
                                 }
-                            }) { Text("Enregistrer") }
-                            OutlinedButton(onClick = onOpenAdmin) { Text("Espace Admin") }
+                            }) { Text("Enregistrer", maxLines = 1, softWrap = false) }
+                            OutlinedButton(onClick = onOpenAdmin) { Text("Espace Admin", maxLines = 1, softWrap = false) }
                         }
                         OutlinedButton(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
@@ -190,7 +193,7 @@ fun SettingsAuthProfileScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Apparence", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf(
                             AppThemeMode.SYSTEM to "Système",
                             AppThemeMode.LIGHT to "Clair",
@@ -199,7 +202,7 @@ fun SettingsAuthProfileScreen(
                             FilterChip(
                                 selected = prefs.themeMode == mode,
                                 onClick = { scope.launch { container.sessionVault.updateThemeMode(mode) } },
-                                label = { Text(label) }
+                                label = { Text(label, maxLines = 1, softWrap = false) }
                             )
                         }
                     }

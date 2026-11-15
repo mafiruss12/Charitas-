@@ -10,6 +10,22 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci_password
+          POSTGRES_DB: charitas_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d charitas_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -18,10 +34,7 @@ jobs:
           node-version: "22"
 
       - name: Install dependencies
-        run: |
-          npm install --no-fund --no-audit --legacy-peer-deps
-          # fallback if lock/bun resolution fails
-          if [ $? -ne 0 ]; then npm install --no-fund --no-audit --force; fi
+        run: npm install --no-fund --no-audit --legacy-peer-deps
 
       - name: TypeScript typecheck
         run: npm run lint
@@ -29,6 +42,36 @@ jobs:
       - name: Production Vite build
         run: npm run build
 
-      - name: Backend unit tests
-        run: npx tsx --test tests/*.test.ts
-        continue-on-error: true
+      - name: Push Drizzle schema & configure non-superuser RLS role
+        env:
+          SQL_HOST: 127.0.0.1
+          SQL_DB_NAME: charitas_ci
+          SQL_ADMIN_USER: postgres
+          SQL_ADMIN_PASSWORD: postgres_ci_password
+          PGPASSWORD: postgres_ci_password
+        run: |
+          npx drizzle-kit push --force
+          psql -h 127.0.0.1 -U postgres -d charitas_ci -v ON_ERROR_STOP=1 <<'SQL'
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'charitas_app') THEN
+                CREATE ROLE charitas_app WITH LOGIN PASSWORD 'charitas_app_ci' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+              END IF;
+            END
+            $$;
+            GRANT USAGE ON SCHEMA public TO charitas_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO charitas_app;
+            GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO charitas_app;
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO charitas_app;
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO charitas_app;
+          SQL
+
+      - name: Backend & RLS integration tests
+        env:
+          NODE_ENV: test
+          SQL_HOST: 127.0.0.1
+          SQL_DB_NAME: charitas_ci
+          SQL_USER: charitas_app
+          SQL_PASSWORD: charitas_app_ci
+          SESSION_SECRET: ci-test-session-secret-32-chars-minimum
+        run: npm test

@@ -1,8 +1,21 @@
 node_modules/
 build/
 dist/
+dev-dist/
 coverage/
+.aistudio/
+release-assets/
 .DS_Store
 *.log
 .env*
 !.env.example
+
+# Android / Gradle build & signing artifacts
+android/.gradle/
+android/build/
+android/**/build/
+android/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore

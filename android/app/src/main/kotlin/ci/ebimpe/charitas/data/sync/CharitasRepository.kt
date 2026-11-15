@@ -16,7 +16,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
+import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.UUID
 
 sealed class RepoResult<out T> {
@@ -36,8 +41,24 @@ class CharitasRepository(
     private val db: CharitasDatabase,
     private val sessionVault: SessionVault,
     private val networkMonitor: NetworkMonitor,
-    private val webSocketClient: CharitasWebSocketClient
+    private val webSocketClient: CharitasWebSocketClient,
+    private val isBackendConfigured: Boolean = true
 ) {
+    private fun sanitizeNetworkError(err: Throwable?, fallback: String = "Serveur paroissial momentanément indisponible."): String {
+        if (err == null) return fallback
+        val msg = err.message?.trim().orEmpty()
+        return when {
+            err is ApiFormatException -> msg.ifBlank { fallback }
+            err is SerializationException || msg.contains("<!doctype", ignoreCase = true) || msg.contains("<html", ignoreCase = true) || msg.contains("Unexpected JSON token", ignoreCase = true) ->
+                "Le serveur API a renvoyé un format inattendu. Mode local actif."
+            err is UnknownHostException || err is ConnectException ->
+                "Impossible de joindre le serveur paroissial. Mode hors ligne actif."
+            err is SocketTimeoutException ->
+                "Délai d’attente dépassé avec le serveur. Veuillez réessayer."
+            err is IOException && msg.isNotBlank() && !msg.contains("java.") -> msg
+            else -> fallback
+        }
+    }
     private val json = NetworkClientFactory.jsonSerializer
     private val cacheDao = db.offlineCacheDao()
     private val outboxDao = db.outboxDao()
@@ -71,7 +92,7 @@ class CharitasRepository(
     fun selectChurch(churchId: Int) {
         sessionVault.setActiveChurchId(churchId)
         val token = sessionVault.getToken()
-        if (!token.isNullOrBlank() && networkMonitor.isOnline.value) {
+        if (isBackendConfigured && !token.isNullOrBlank() && networkMonitor.isOnline.value) {
             webSocketClient.connect(token, churchId)
         }
     }
@@ -80,7 +101,7 @@ class CharitasRepository(
 
     suspend fun restoreSessionIfPresent(): Boolean {
         val token = sessionVault.getToken() ?: return false
-        if (!networkMonitor.refreshNow()) {
+        if (!isBackendConfigured || !networkMonitor.refreshNow()) {
             // Restore cached /me profile when offline so authenticated user can view cached content safely
             val cached = cacheDao.getCachedJson("private:me")?.let {
                 runCatching { json.decodeFromString<MeResponseDto>(it.payloadJson) }.getOrNull()
@@ -122,6 +143,9 @@ class CharitasRepository(
     }
 
     suspend fun login(email: String, password: String): RepoResult<UserDto> {
+        if (!isBackendConfigured) {
+            return RepoResult.Error("Serveur paroissial distant non configuré dans cette version.")
+        }
         if (!networkMonitor.refreshNow()) {
             return RepoResult.Error("Connexion Internet requise pour se connecter.")
         }
@@ -137,7 +161,7 @@ class CharitasRepository(
                 RepoResult.Error(NetworkClientFactory.parseErrorMessage(res))
             }
         } catch (e: Exception) {
-            RepoResult.Error(e.message ?: "Impossible de joindre le serveur.")
+            RepoResult.Error(sanitizeNetworkError(e, "Impossible de joindre le serveur."))
         }
     }
 
@@ -149,6 +173,9 @@ class CharitasRepository(
         invitationCode: String?,
         churchId: Int
     ): RepoResult<UserDto> {
+        if (!isBackendConfigured) {
+            return RepoResult.Error("Serveur paroissial distant non configuré dans cette version.")
+        }
         if (!networkMonitor.refreshNow()) {
             return RepoResult.Error("Connexion Internet requise pour créer un compte.")
         }
@@ -172,11 +199,12 @@ class CharitasRepository(
                 RepoResult.Error(NetworkClientFactory.parseErrorMessage(res))
             }
         } catch (e: Exception) {
-            RepoResult.Error(e.message ?: "Erreur réseau lors de l'inscription.")
+            RepoResult.Error(sanitizeNetworkError(e, "Erreur réseau lors de l'inscription."))
         }
     }
 
     suspend fun forgotPassword(email: String): RepoResult<MessageResponseDto> {
+        if (!isBackendConfigured) return RepoResult.Error("Serveur paroissial distant non configuré.")
         if (!networkMonitor.refreshNow()) return RepoResult.Error("Réseau indisponible.")
         return try {
             val res = api.forgotPassword(ForgotPasswordRequest(email.trim()))
@@ -186,11 +214,12 @@ class CharitasRepository(
                 RepoResult.Error(NetworkClientFactory.parseErrorMessage(res))
             }
         } catch (e: Exception) {
-            RepoResult.Error(e.message ?: "Erreur réseau.")
+            RepoResult.Error(sanitizeNetworkError(e, "Erreur réseau."))
         }
     }
 
     suspend fun resetPassword(token: String, newPassword: String): RepoResult<MessageResponseDto> {
+        if (!isBackendConfigured) return RepoResult.Error("Serveur paroissial distant non configuré.")
         if (!networkMonitor.refreshNow()) return RepoResult.Error("Réseau indisponible.")
         return try {
             val res = api.resetPassword(ResetPasswordRequest(token.trim(), newPassword))
@@ -200,11 +229,12 @@ class CharitasRepository(
                 RepoResult.Error(NetworkClientFactory.parseErrorMessage(res))
             }
         } catch (e: Exception) {
-            RepoResult.Error(e.message ?: "Erreur réseau.")
+            RepoResult.Error(sanitizeNetworkError(e, "Erreur réseau."))
         }
     }
 
     suspend fun updateProfile(fullName: String, phone: String?, city: String?, bio: String?): RepoResult<UserDto> {
+        if (!isBackendConfigured) return RepoResult.Error("Serveur paroissial distant non configuré.")
         if (!networkMonitor.refreshNow()) return RepoResult.Error("Connexion requise pour modifier le profil.")
         return try {
             val res = api.updateMe(UpdateProfileRequest(fullName = fullName, phone = phone, city = city, bio = bio))
@@ -216,7 +246,7 @@ class CharitasRepository(
                 RepoResult.Error(NetworkClientFactory.parseErrorMessage(res))
             }
         } catch (e: Exception) {
-            RepoResult.Error(e.message ?: "Erreur mise à jour profil.")
+            RepoResult.Error(sanitizeNetworkError(e, "Erreur mise à jour profil."))
         }
     }
 
@@ -237,7 +267,9 @@ class CharitasRepository(
         crossinline fetcher: suspend () -> retrofit2.Response<T>
     ): RepoResult<T> {
         var networkError: String? = null
-        if (networkMonitor.refreshNow()) {
+        if (!isBackendConfigured) {
+            networkError = "Mode hors ligne actif · Contenu paroissial local affiché."
+        } else if (networkMonitor.refreshNow()) {
             val attemptResult = runCatching { fetcher() }
             val attempt = attemptResult.getOrNull()
             if (attempt != null && attempt.isSuccessful && attempt.body() != null) {
@@ -253,14 +285,14 @@ class CharitasRepository(
             }
             networkError = when {
                 attemptResult.exceptionOrNull() != null ->
-                    attemptResult.exceptionOrNull()?.message ?: "Erreur réseau"
-                attempt == null -> "Réponse serveur vide"
+                    sanitizeNetworkError(attemptResult.exceptionOrNull(), "Serveur temporairement indisponible.")
+                attempt == null -> "Réponse serveur vide."
                 !attempt.isSuccessful ->
-                    "Serveur ${attempt.code()}: ${NetworkClientFactory.parseErrorMessage(attempt)}"
-                else -> "Réponse invalide du serveur"
+                    NetworkClientFactory.parseErrorMessage(attempt)
+                else -> "Réponse invalide du serveur."
             }
         } else {
-            networkError = "Pas de connexion Internet"
+            networkError = "Pas de connexion Internet."
         }
 
         val cached = cacheDao.getCachedJson(cacheKey)
@@ -327,7 +359,7 @@ class CharitasRepository(
 
         // 2) Optionnel : chaînes église via API (si dispo)
         var churchChannels: List<ci.ebimpe.charitas.core.model.TvChannelDto> = emptyList()
-        if (networkMonitor.refreshNow()) {
+        if (isBackendConfigured && networkMonitor.refreshNow()) {
             val apiResult = runCatching {
                 api.getPublicTvCatalog(
                     churchId = churchId.takeIf { it > 0 },
@@ -385,13 +417,15 @@ class CharitasRepository(
         }
 
         return RepoResult.Error(
-            iptvResult.exceptionOrNull()?.message
-                ?: "Impossible de charger les chaînes religieuses iptv-org. Vérifiez Internet."
+            sanitizeNetworkError(
+                iptvResult.exceptionOrNull(),
+                "Impossible de charger les chaînes religieuses iptv-org. Vérifiez Internet."
+            )
         )
     }
 
     suspend fun verifyTvChannelNow(channelId: Int): TvChannelDto? {
-        if (!networkMonitor.refreshNow()) return null
+        if (!isBackendConfigured || !networkMonitor.refreshNow()) return null
         return runCatching {
             val res = api.verifyTvChannelNow(channelId)
             if (res.isSuccessful) res.body()?.channel else null
@@ -405,7 +439,7 @@ class CharitasRepository(
         fetchWithOfflineCache("public:solidarity:$churchId", isPrivate = false) { api.getPublicSolidarity(churchId) }
 
     suspend fun syncSpiritualForVisitorAndMember(churchId: Int) {
-        if (!networkMonitor.refreshNow()) return
+        if (!isBackendConfigured || !networkMonitor.refreshNow()) return
         val isAuth = _currentUser.value != null && hasPermission(CharitasPermissions.SPIRITUAL_VIEW)
         if (isAuth) {
             val res = runCatching { api.getSpiritualOverview(churchId) }.getOrNull()
@@ -528,7 +562,7 @@ class CharitasRepository(
             status = OutboxStatus.PENDING.name
         )
         val rowId = outboxDao.enqueue(op)
-        if (networkMonitor.refreshNow()) {
+        if (isBackendConfigured && networkMonitor.refreshNow()) {
             flushOutbox()
         } else {
             OutboxSyncWorker.scheduleSyncWhenConnected(context)
@@ -537,7 +571,7 @@ class CharitasRepository(
     }
 
     suspend fun flushOutbox(): OutboxFlushOutcome {
-        if (!networkMonitor.refreshNow()) {
+        if (!isBackendConfigured || !networkMonitor.refreshNow()) {
             return OutboxFlushOutcome(0, 0, hasRetryableFailure = true)
         }
         val ops = outboxDao.getDispatchableOperations()
@@ -564,7 +598,7 @@ class CharitasRepository(
                 failed++
             } else {
                 // Transient server/network error -> leave PENDING & retry via WorkManager
-                val err = result.exceptionOrNull()?.message ?: "Erreur réseau temporaire"
+                val err = sanitizeNetworkError(result.exceptionOrNull(), "Erreur réseau temporaire")
                 outboxDao.updateStatus(op.id, OutboxStatus.PENDING.name, op.retryCount + 1, err)
                 failed++
                 retryable = true
@@ -603,6 +637,25 @@ class CharitasRepository(
                 val body = json.decodeFromString<BookmarkToggleRequest>(op.payloadJson)
                 api.toggleBibleBookmark(op.churchId, body)
             }
+        }
+    }
+
+    suspend fun submitVisitorContact(req: VisitorContactRequest): RepoResult<String> {
+        if (!isBackendConfigured) {
+            return RepoResult.Error("Service de contact en ligne non configuré sur cette version.")
+        }
+        if (!networkMonitor.refreshNow()) {
+            return RepoResult.Error("Connexion Internet requise pour envoyer votre message.")
+        }
+        return try {
+            val res = api.submitVisitorContact(req)
+            if (res.isSuccessful) {
+                RepoResult.Success("Votre message a été transmis à la paroisse.")
+            } else {
+                RepoResult.Error(NetworkClientFactory.parseErrorMessage(res))
+            }
+        } catch (e: Exception) {
+            RepoResult.Error(sanitizeNetworkError(e, "Impossible d’envoyer le message pour le moment."))
         }
     }
 }
