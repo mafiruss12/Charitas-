@@ -6,12 +6,18 @@ import {
   CheckCircle2,
   HandHeart,
   Heart,
+  Phone,
   PlayCircle,
   Target,
   Tv,
   Users,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import {
+  OFFICIAL_PARISH_LOGO,
+  OFFICIAL_PARISH_NAME,
+  PARISH_LEADERS_CONTACTS,
+} from '../lib/parishInfo';
 import type { PublicShowcaseResponse, ThemeMode } from '../types/platform';
 import { ResilientImage } from './ResilientImage';
 import { LandingNavbar } from './landing/LandingNavbar';
@@ -332,6 +338,22 @@ export const LandingView: React.FC<LandingViewProps> = ({
             {/* Right Elevated Checklist Card */}
             <div className="lg:col-span-4">
               <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 sm:p-7 shadow-[0_18px_50px_-15px_rgba(15,23,42,0.12)] space-y-5">
+                <div className="flex items-center gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                  <img
+                    src={OFFICIAL_PARISH_LOGO}
+                    alt={OFFICIAL_PARISH_NAME}
+                    className="w-14 h-14 rounded-full object-cover border-2 border-[#F5B82E] bg-white shrink-0 shadow-sm"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-[#1D4ED8] dark:text-[#60A5FA]">
+                      Paroisse officielle
+                    </p>
+                    <p className="text-sm font-bold text-[#061A40] dark:text-white leading-snug">
+                      Église Saint Louis Roi d’Ebimpé
+                    </p>
+                  </div>
+                </div>
+
                 <ul className="space-y-3.5">
                   {checklistItems.map((item) => (
                     <li
@@ -361,6 +383,58 @@ export const LandingView: React.FC<LandingViewProps> = ({
                   <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* Responsables de l'église & Personnes à contacter */}
+          <div
+            id="contact-responsables"
+            className="mt-12 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/90 dark:bg-[#111827] p-6 sm:p-8"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200/80 dark:border-slate-800">
+              <div className="flex items-center gap-4">
+                <img
+                  src={OFFICIAL_PARISH_LOGO}
+                  alt={OFFICIAL_PARISH_NAME}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-[#F5B82E] bg-white shadow-md shrink-0"
+                />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#1D4ED8] dark:text-[#60A5FA]">
+                    À propos &amp; Personnes à contacter
+                  </p>
+                  <h3 className="mt-0.5 text-xl sm:text-2xl font-extrabold text-[#061A40] dark:text-white">
+                    Responsables de la CHARITAS — Église Saint Louis Roi d’Ebimpé
+                  </h3>
+                  <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                    Pour toute aide fraternelle, information paroissiale, visite ou don, contactez directement nos responsables :
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {PARISH_LEADERS_CONTACTS.map((leader) => (
+                <a
+                  key={leader.phone}
+                  href={`tel:${leader.phone}`}
+                  className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 hover:border-[#1D4ED8] hover:shadow-md transition-all flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[#1D4ED8] dark:text-[#60A5FA]">
+                      {leader.role}
+                    </p>
+                    <p className="mt-1 text-base font-bold text-[#061A40] dark:text-white truncate">
+                      {leader.name}
+                    </p>
+                    <p className="mt-1 text-sm font-mono-tabular font-semibold text-slate-700 dark:text-slate-300">
+                      {leader.displayPhone}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-full bg-[#1D4ED8]/10 group-hover:bg-[#1D4ED8] text-[#1D4ED8] group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                    <Phone className="w-5 h-5" aria-hidden="true" />
+                  </div>
+                </a>
+              ))}
             </div>
           </div>
         </div>

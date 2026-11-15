@@ -36,6 +36,11 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS } from '../db/rbac';
 import { apiFetch } from '../lib/api';
+import {
+  OFFICIAL_PARISH_LOGO,
+  OFFICIAL_PARISH_NAME,
+  POWERED_BY_CREDIT,
+} from '../lib/parishInfo';
 import type { DashboardResponse, NotificationItem } from '../types/platform';
 import { CreateChurchModal, JoinChurchModal } from './ChurchModals';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -156,12 +161,12 @@ export const Phase1Workspace: React.FC = () => {
         <header className="border-b border-[#E5DED3] dark:border-slate-800 bg-white dark:bg-[#111827] px-6 h-16 flex items-center justify-between">
           <div className="inline-flex items-center gap-3">
             <img
-              src="/src/assets/images/charitas_emblem_crest_1794525619241.jpg"
-              alt="Emblème CHARITAS — Église Saint Louis Roi d’Ebimpé"
-              className="w-8 h-8 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
+              src={OFFICIAL_PARISH_LOGO}
+              alt={`Emblème ${OFFICIAL_PARISH_NAME}`}
+              className="w-9 h-9 rounded-full object-cover border border-[#F5B82E] bg-white"
             />
             <span className="font-display text-lg sm:text-xl font-bold text-[#061A40] dark:text-white truncate max-w-[260px] sm:max-w-none">
-              CHARITAS — Église Saint Louis Roi d’Ebimpé
+              {OFFICIAL_PARISH_NAME}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -382,9 +387,19 @@ export const Phase1Workspace: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl overflow-hidden border border-stone-200 dark:border-slate-700 shrink-0">
+            <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#F5B82E]/80 bg-white shrink-0">
               <ResilientImage
-                src={dashboard?.church.logoUrl || activeMembership?.churchLogoUrl}
+                src={
+                  (dashboard?.church.logoUrl &&
+                  !dashboard.church.logoUrl.includes('charitas_emblem_crest')
+                    ? dashboard.church.logoUrl
+                    : null) ||
+                  (activeMembership?.churchLogoUrl &&
+                  !activeMembership.churchLogoUrl.includes('charitas_emblem_crest')
+                    ? activeMembership.churchLogoUrl
+                    : null) ||
+                  OFFICIAL_PARISH_LOGO
+                }
                 alt="Logo CHARITAS"
                 className="w-full h-full object-cover"
               />
@@ -462,23 +477,28 @@ export const Phase1Workspace: React.FC = () => {
             })}
         </nav>
 
-        <div className="p-4 border-t border-stone-200 dark:border-slate-800 flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-stone-900 dark:text-white truncate">
-              {user?.fullName}
-            </p>
-            <p className="text-[11px] text-stone-500 dark:text-slate-400 truncate">
-              {user?.email}
-            </p>
+        <div className="p-4 border-t border-stone-200 dark:border-slate-800 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-stone-900 dark:text-white truncate">
+                {user?.fullName}
+              </p>
+              <p className="text-[11px] text-stone-500 dark:text-slate-400 truncate">
+                {user?.email}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              className="p-2 rounded-lg text-stone-500 hover:bg-stone-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+              title="Déconnexion"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={logout}
-            className="p-2 rounded-lg text-stone-500 hover:bg-stone-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
-            title="Déconnexion"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <p className="text-[10px] font-medium text-stone-400 dark:text-slate-500 truncate">
+            {POWERED_BY_CREDIT}
+          </p>
         </div>
       </aside>
 

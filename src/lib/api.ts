@@ -17,6 +17,18 @@ export class ApiError extends Error {
   }
 }
 
+function sanitizeErrorMessage(raw: string, status: number): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('<') || /<\s*html/i.test(trimmed) || /<!doctype/i.test(trimmed)) {
+    if (status === 404) return 'Service de diffusion temporairement indisponible (Erreur 404).';
+    if (status === 502 || status === 503 || status === 504) {
+      return 'Serveur temporairement indisponible. Reconnexion en cours...';
+    }
+    return `Erreur de communication avec le serveur (HTTP ${status}).`;
+  }
+  return trimmed.slice(0, 300);
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit & { token?: string | null; churchId?: number | null } = {}
@@ -25,8 +37,8 @@ export async function apiFetch<T>(
   const authToken = token !== undefined ? token : inMemoryAuthToken;
 
   const finalHeaders: Record<string, string> = {
-    Accept: 'application/json',
     'Content-Type': 'application/json',
+    Accept: 'application/json, text/plain, */*',
     ...(headers as Record<string, string> | undefined),
   };
 
@@ -42,38 +54,34 @@ export async function apiFetch<T>(
     headers: finalHeaders,
   });
 
-  const contentType = (response.headers.get('content-type') || '').toLowerCase();
   const text = await response.text();
-  const trimmed = text.trimStart();
-
-  if (
-    trimmed.startsWith('<!doctype') ||
-    trimmed.startsWith('<html') ||
-    trimmed.startsWith('<') ||
-    (contentType && !contentType.includes('json') && text.length > 0 && !response.ok)
-  ) {
-    throw new ApiError(
-      'Réponse serveur invalide (HTML reçu au lieu de JSON). Vérifiez que le backend API est actif.',
-      response.status || 502
-    );
-  }
-
-  let data: unknown = {};
+  let data: unknown = null;
+  let isJson = false;
   if (text) {
     try {
       data = JSON.parse(text);
+      isJson = true;
     } catch {
-      throw new ApiError(`Réponse JSON invalide du serveur (${response.status}).`, response.status || 502);
+      data = null;
+      isJson = false;
     }
   }
 
   if (!response.ok) {
-    const errMsg =
-      typeof data === 'object' && data !== null && 'error' in data
-        ? String((data as { error: unknown }).error)
-        : `Erreur serveur (${response.status})`;
+    let errMsg = `Erreur serveur (${response.status})`;
+    if (isJson && typeof data === 'object' && data !== null && 'error' in data) {
+      const rawErr = (data as { error: unknown }).error;
+      errMsg = typeof rawErr === 'string' ? sanitizeErrorMessage(rawErr, response.status) : String(rawErr);
+    } else if (text) {
+      errMsg = sanitizeErrorMessage(text, response.status);
+    }
     throw new ApiError(errMsg, response.status);
   }
 
-  return data as T;
+  if (!isJson && text && (text.trim().startsWith('<') || /<\s*html/i.test(text))) {
+    throw new ApiError('Format de données inattendu (reçu HTML au lieu de JSON).', 500);
+  }
+
+  return (data ?? {}) as T;
 }
+

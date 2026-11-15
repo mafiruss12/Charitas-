@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, KeyRound, Loader2, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
+import {
+  OFFICIAL_PARISH_LOGO,
+  OFFICIAL_PARISH_NAME,
+  POWERED_BY_CREDIT,
+} from '../lib/parishInfo';
 import type { PublicChurch } from '../types/platform';
 
 interface AuthViewsProps {
@@ -181,12 +186,12 @@ export const AuthViews: React.FC<AuthViewsProps> = ({
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-4">
               <img
-                src="/src/assets/images/charitas_emblem_crest_1794525619241.jpg"
-                alt="Emblème CHARITAS — Église Saint Louis Roi d’Ebimpé"
-                className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
+                src={OFFICIAL_PARISH_LOGO}
+                alt={`Emblème ${OFFICIAL_PARISH_NAME}`}
+                className="w-12 h-12 rounded-full object-cover border-2 border-[#F5B82E] bg-white shadow-sm"
               />
               <span className="text-xs font-semibold tracking-wide text-[#1D4ED8] dark:text-[#60A5FA]">
-                CHARITAS — Église Saint Louis Roi d’Ebimpé
+                {OFFICIAL_PARISH_NAME}
               </span>
             </div>
             <h1 className="font-display text-3xl font-semibold text-[#061A40] dark:text-white">
@@ -543,6 +548,9 @@ export const AuthViews: React.FC<AuthViewsProps> = ({
             </form>
           )}
         </div>
+        <p className="mt-6 text-center text-xs font-medium text-slate-500 dark:text-slate-400">
+          {POWERED_BY_CREDIT}
+        </p>
       </div>
     </div>
   );

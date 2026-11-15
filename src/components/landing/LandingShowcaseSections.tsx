@@ -16,6 +16,11 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import {
+  OFFICIAL_PARISH_NAME,
+  PARISH_LEADERS_CONTACTS,
+  POWERED_BY_CREDIT,
+} from '../../lib/parishInfo';
 import type {
   PublicFeaturedChurch,
   PublicShowcaseResponse,
@@ -760,40 +765,51 @@ export const LandingShowcaseSections: React.FC<LandingShowcaseSectionsProps> = (
             </div>
 
             <div className="md:col-span-4 space-y-2.5 text-sm">
-              <p className="font-semibold text-white">Coordonnées &amp; Contact</p>
-              <ul className="space-y-2 text-slate-400">
-                <li className="flex items-start gap-2">
+              <p className="font-semibold text-white">Personnes à contacter &amp; Coordonnées</p>
+              <ul className="space-y-2 text-slate-300">
+                {PARISH_LEADERS_CONTACTS.map((leader) => (
+                  <li key={leader.phone} className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-[#F5B82E] shrink-0" />
+                    <a
+                      href={`tel:${leader.phone}`}
+                      className="hover:text-[#F5B82E] transition-colors font-medium"
+                    >
+                      <span className="text-white font-semibold">{leader.name}</span> :{' '}
+                      <span className="tabular-nums">{leader.displayPhone}</span>
+                    </a>
+                  </li>
+                ))}
+                <li className="flex items-start gap-2 pt-1 text-slate-400">
                   <MapPin className="w-4 h-4 text-[#F5B82E] mt-0.5 shrink-0" />
                   <span>
                     {[featured?.address, featured?.city, featured?.country]
                       .filter(Boolean)
-                      .join(', ') || "Ebimpé, Abidjan, Côte d'Ivoire"}
+                      .join(', ') || "Ebimpé, Commune d'Anyama, Côte d'Ivoire"}
                   </span>
                 </li>
-                {featured?.phone && (
-                  <li className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-[#F5B82E] shrink-0" />
-                    <span>{featured.phone}</span>
-                  </li>
-                )}
                 {featured?.email && (
-                  <li className="flex items-center gap-2">
+                  <li className="flex items-center gap-2 text-slate-400">
                     <Mail className="w-4 h-4 text-[#F5B82E] shrink-0" />
                     <span>{featured.email}</span>
                   </li>
                 )}
-                <li className="flex items-center gap-2">
+                <li className="flex items-center gap-2 text-slate-400">
                   <Share2 className="w-4 h-4 text-[#F5B82E] shrink-0" />
-                  <span>Communauté CHARITAS · Facebook, WhatsApp &amp; YouTube paroissial</span>
+                  <span>Communauté CHARITAS · Saint Louis Roi d’Ebimpé</span>
                 </li>
               </ul>
             </div>
           </div>
 
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-            <span>
-              © {new Date().getFullYear()} {featured?.name || 'CHARITAS — Église Saint Louis Roi d’Ebimpé'} — Tous droits réservés.
-            </span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-center sm:text-left">
+              <span>
+                © {new Date().getFullYear()} {featured?.name || OFFICIAL_PARISH_NAME} — Tous droits réservés.
+              </span>
+              <span className="text-[#F5B82E] font-semibold">
+                {POWERED_BY_CREDIT}
+              </span>
+            </div>
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -847,14 +863,19 @@ export const LandingShowcaseSections: React.FC<LandingShowcaseSectionsProps> = (
               Besoin d’un renseignement paroissial, d’une intention de prière ou d’annoncer votre
               première visite ?
             </p>
-            <div className="mt-3 space-y-2 text-xs">
-              {featured?.phone && (
-                <p className="font-medium text-slate-700 dark:text-slate-300">
-                  Secrétariat : {featured.phone}
+            <div className="mt-3 space-y-1.5 text-xs">
+              <p className="font-bold text-[#061A40] dark:text-[#F5B82E]">
+                Responsables à contacter :
+              </p>
+              {PARISH_LEADERS_CONTACTS.map((leader) => (
+                <p key={leader.phone} className="font-medium text-slate-700 dark:text-slate-300">
+                  <a href={`tel:${leader.phone}`} className="hover:text-[#1D4ED8] dark:hover:text-[#60A5FA]">
+                    {leader.name} : <span className="font-bold tabular-nums">{leader.displayPhone}</span>
+                  </a>
                 </p>
-              )}
+              ))}
               {featured?.email && (
-                <p className="font-medium text-slate-700 dark:text-slate-300">
+                <p className="pt-1 font-medium text-slate-600 dark:text-slate-400">
                   Email : {featured.email}
                 </p>
               )}

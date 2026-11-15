@@ -967,7 +967,7 @@ churchesRouter.post('/churches', requireAuth, async (req: AuthRequest, res) => {
         logoUrl:
           typeof logoUrl === 'string' && logoUrl.trim()
             ? logoUrl.trim()
-            : '/src/assets/images/charitas_emblem_crest_1794525619241.jpg',
+            : '/assets/aistudio/IMG-20261115-WA0014_7d3ce8f2.jpg',
         bannerUrl:
           typeof bannerUrl === 'string' && bannerUrl.trim()
             ? bannerUrl.trim()

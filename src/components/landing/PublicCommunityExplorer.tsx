@@ -11,6 +11,7 @@ import {
   MapPin,
   MessageCircle,
   Newspaper,
+  Phone,
   Play,
   Radio,
   Search,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { parseVideoMedia } from '../../lib/media';
+import { PARISH_LEADERS_CONTACTS } from '../../lib/parishInfo';
 import type {
   PublicChurch,
   PublicEventsResponse,
@@ -894,6 +896,28 @@ export const PublicCommunityExplorer: React.FC<PublicCommunityExplorerProps> = (
                   <strong>{selectedChurch?.name}</strong> afin d’assurer un suivi fraternel et
                   confidentiel.
                 </p>
+                <div className="rounded-2xl bg-slate-50 dark:bg-[#111827] border border-slate-200 dark:border-slate-800 p-5 space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+                  <p className="font-semibold text-[#061A40] dark:text-white">
+                    Personnes à contacter (Responsables de la paroisse)
+                  </p>
+                  <div className="space-y-2">
+                    {PARISH_LEADERS_CONTACTS.map((leader) => (
+                      <a
+                        key={leader.phone}
+                        href={`tel:${leader.phone}`}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 hover:border-[#1D4ED8] transition-colors"
+                      >
+                        <span className="font-semibold text-[#061A40] dark:text-white">
+                          {leader.name}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 font-mono-tabular font-semibold text-[#1D4ED8] dark:text-[#60A5FA]">
+                          <Phone className="w-3.5 h-3.5" />
+                          {leader.displayPhone}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
                 <div className="rounded-2xl bg-slate-50 dark:bg-[#111827] border border-slate-200 dark:border-slate-800 p-5 space-y-2 text-xs text-slate-600 dark:text-slate-300">
                   <p className="font-semibold text-[#061A40] dark:text-white">
                     Vous souhaitez créer un compte membre complet ?

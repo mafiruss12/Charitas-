@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -171,11 +172,13 @@ fun HomeScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Image(
-                                painter = painterResource(id = R.drawable.ic_charitas_crest),
-                                contentDescription = "Logo CHARITAS",
+                                painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
+                                contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .size(46.dp)
+                                    .size(48.dp)
                                     .clip(CircleShape)
+                                    .border(1.5.dp, CharitasGold, CircleShape)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
@@ -526,18 +529,32 @@ fun HomeScreen(
                         )
                     }
 
-                    // Badge "Notre mission"
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = Color(0xFF1D4ED8).copy(alpha = 0.12f)
+                    // Badge "Notre mission" + Logo officiel
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = "🎯 Notre mission",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF1D4ED8),
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
+                            contentDescription = "Emblème Paroisse Saint Louis Roi d’Ebimpé",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .border(1.5.dp, CharitasGold, CircleShape)
                         )
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = Color(0xFF1D4ED8).copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "🎯 À propos & Notre mission",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF1D4ED8),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
                     }
 
                     Text(
@@ -764,6 +781,154 @@ fun HomeScreen(
                 }
             }
         }
+        // ==================== 6. À PROPOS & PERSONNES À CONTACTER (RESPONSABLES) ====================
+        item {
+            val leaders = listOf(
+                Triple("Ako Vince", "Responsable de la Paroisse", "0747160619" to "07 47 16 06 19"),
+                Triple("Emmanuel Tanoh", "Responsable de la Paroisse", "0747417231" to "07 47 41 72 31"),
+                Triple("Some Séraphin", "Responsable de la Paroisse", "0505627855" to "05 05 62 78 55")
+            )
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CharitasGold.copy(alpha = 0.45f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
+                            contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(CircleShape)
+                                .border(1.5.dp, CharitasGold, CircleShape)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "À propos & Personnes à contacter",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = CharitasRoyalNavy
+                            )
+                            Text(
+                                text = "Responsables de l’Église Saint Louis Roi d’Ebimpé",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Pour toute demande d’information, intention de prière, orientation pastorale ou action de solidarité CHARITAS, contactez directement nos responsables :",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        leaders.forEach { (leaderName, leaderRole, phonePair) ->
+                            val (telRaw, telFormatted) = phonePair
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(CharitasRoyalNavy.copy(alpha = 0.06f))
+                                    .clickable {
+                                        val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$telRaw"))
+                                        context.startActivity(dial)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(CharitasRoyalNavy),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Phone,
+                                            contentDescription = null,
+                                            tint = CharitasGold,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = leaderName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = leaderRole,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = CharitasGold
+                                ) {
+                                    Text(
+                                        text = telFormatted,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = CharitasDeepNavy,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==================== 7. PIED DE PAGE OFFICIEL ====================
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "CHARITAS · Paroisse Saint Louis Roi d’Ebimpé",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Powered by Kevin Akoh de Kevin Tech Pro",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = CharitasRoyalNavy,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 
     // Modal dialogue pour contacter la paroisse
@@ -773,15 +938,39 @@ fun HomeScreen(
         var msg by remember { mutableStateOf("") }
         var sending by remember { mutableStateOf(false) }
 
+        val modalContacts = listOf(
+            "Ako Vince" to "0747160619",
+            "Emmanuel Tanoh" to "0747417231",
+            "Some Séraphin" to "0505627855"
+        )
+
         AlertDialog(
             onDismissRequest = { showContactDialog = false },
             title = { Text("Contacter l’Église Saint Louis Roi") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Laissez votre message à l'équipe pastorale ou à la permanence CHARITAS d’Ebimpé.",
-                        style = MaterialTheme.typography.bodySmall
+                        "Responsables à contacter directement :",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
                     )
+                    modalContacts.forEach { (leader, num) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(CharitasRoyalNavy.copy(alpha = 0.07f))
+                                .clickable {
+                                    context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$num")))
+                                }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(leader, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                            Text(num, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = CharitasRoyalNavy)
+                        }
+                    }
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },

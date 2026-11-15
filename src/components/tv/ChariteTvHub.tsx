@@ -31,6 +31,7 @@ import type {
   TvChannelItem,
   TvWatchHistoryItem,
 } from '../../types/platform';
+import { fetchLiveFallbackTvCatalog } from '../../lib/fallbackTvCatalog';
 import { ResilientImage } from '../ResilientImage';
 import { HlsVideoPlayer, type PlayerSourceMeta } from './HlsVideoPlayer';
 
@@ -86,13 +87,36 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
       const qs = new URLSearchParams();
       if (churchId) qs.set('churchId', String(churchId));
       if (forceRefresh) qs.set('refresh', '1');
-      const publicCatalog = await apiFetch<PublicTvCatalogResponse>(
-        `/api/public/tv/catalog${qs.toString() ? `?${qs.toString()}` : ''}`
-      );
-      setCatalog(publicCatalog);
 
-      const resolvedChurchId = churchId || publicCatalog.churchId;
-      if (isAuthenticated && resolvedChurchId) {
+      let resolvedCatalog: PublicTvCatalogResponse | null = null;
+      let usedFallback = false;
+
+      try {
+        const publicCatalog = await apiFetch<PublicTvCatalogResponse>(
+          `/api/public/tv/catalog${qs.toString() ? `?${qs.toString()}` : ''}`
+        );
+        if (publicCatalog && Array.isArray(publicCatalog.channels) && publicCatalog.channels.length > 0) {
+          resolvedCatalog = publicCatalog;
+        } else {
+          const fallbackCatalog = await fetchLiveFallbackTvCatalog(
+            publicCatalog?.churchId || churchId || 1
+          );
+          resolvedCatalog = {
+            ...fallbackCatalog,
+            churchName: publicCatalog?.churchName || fallbackCatalog.churchName,
+            broadcasts: publicCatalog?.broadcasts || [],
+          };
+          usedFallback = true;
+        }
+      } catch {
+        resolvedCatalog = await fetchLiveFallbackTvCatalog(churchId || 1);
+        usedFallback = true;
+      }
+
+      setCatalog(resolvedCatalog);
+
+      const resolvedChurchId = churchId || resolvedCatalog.churchId;
+      if (!usedFallback && isAuthenticated && resolvedChurchId) {
         try {
           const memberState = await apiFetch<{
             favoriteChannelIds: number[];
@@ -108,41 +132,39 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
       setActiveSelection((prev) => {
         if (prev) {
           if (prev.kind === 'channel') {
-            const stillOperational = publicCatalog.channels.find((c) => c.id === prev.item.id);
+            const stillOperational = resolvedCatalog.channels.find((c) => c.id === prev.item.id);
             if (stillOperational) return { ...prev, item: stillOperational };
           } else {
-            const stillVisible = publicCatalog.broadcasts.find((b) => b.id === prev.item.id);
+            const stillVisible = resolvedCatalog.broadcasts.find((b) => b.id === prev.item.id);
             if (stillVisible) return { ...prev, item: stillVisible };
           }
         }
-        const liveBroadcast = publicCatalog.broadcasts.find((b) => b.status === 'live');
+        const liveBroadcast = resolvedCatalog.broadcasts.find((b) => b.status === 'live');
         if (liveBroadcast) {
           return { kind: 'broadcast', item: liveBroadcast, autoSelected: true };
         }
         const preferredChannel =
-          publicCatalog.recommendedChannels.find((c) => c.streamStatus === 'operational') ||
-          publicCatalog.channels.find((c) => c.streamStatus === 'operational') ||
-          publicCatalog.recommendedChannels[0] ||
-          publicCatalog.channels[0];
+          resolvedCatalog.recommendedChannels.find((c) => c.streamStatus === 'operational') ||
+          resolvedCatalog.channels.find((c) => c.streamStatus === 'operational') ||
+          resolvedCatalog.recommendedChannels[0] ||
+          resolvedCatalog.channels[0];
         if (preferredChannel) {
           return { kind: 'channel', item: preferredChannel, autoSelected: true };
         }
-        if (publicCatalog.broadcasts[0]) {
-          return { kind: 'broadcast', item: publicCatalog.broadcasts[0], autoSelected: true };
+        if (resolvedCatalog.broadcasts[0]) {
+          return { kind: 'broadcast', item: resolvedCatalog.broadcasts[0], autoSelected: true };
         }
         return null;
       });
       if (forceRefresh) {
         setFailedChannelIds([]);
         setShareToast(
-          `${publicCatalog.channels.length} chaîne(s) vérifiée(s) en direct en temps réel.`
+          `${resolvedCatalog.channels.length} chaîne(s) chrétienne(s) disponible(s) en direct.`
         );
         setTimeout(() => setShareToast(null), 3500);
       }
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : 'Impossible de charger CHARITAS TV pour le moment.'
-      );
+    } catch {
+      setError('Impossible de charger CHARITAS TV pour le moment. Veuillez réessayer.');
     } finally {
       setLoading(false);
       setVerifyingLive(false);
@@ -322,26 +344,28 @@ export const ChariteTvHub: React.FC<ChariteTvHubProps> = ({
         : [...failedChannelIds, failedId];
       setFailedChannelIds(nextFailed);
 
-      // Ask backend to re-probe this stream immediately in real time
-      apiFetch<{ channel: TvChannelItem }>(`/api/public/tv/channels/${failedId}/verify-now`, {
-        method: 'POST',
-      })
-        .then((res) => {
-          if (res.channel && res.channel.streamStatus !== 'operational') {
-            setCatalog((prevCat) =>
-              prevCat
-                ? {
-                    ...prevCat,
-                    channels: prevCat.channels.filter((c) => c.id !== failedId),
-                    recommendedChannels: prevCat.recommendedChannels.filter(
-                      (c) => c.id !== failedId
-                    ),
-                  }
-                : prevCat
-            );
-          }
+      // Ask backend to re-probe database channels (skip synthetic negative fallback IDs)
+      if (failedId > 0) {
+        apiFetch<{ channel: TvChannelItem }>(`/api/public/tv/channels/${failedId}/verify-now`, {
+          method: 'POST',
         })
-        .catch(() => {});
+          .then((res) => {
+            if (res.channel && res.channel.streamStatus !== 'operational') {
+              setCatalog((prevCat) =>
+                prevCat
+                  ? {
+                      ...prevCat,
+                      channels: prevCat.channels.filter((c) => c.id !== failedId),
+                      recommendedChannels: prevCat.recommendedChannels.filter(
+                        (c) => c.id !== failedId
+                      ),
+                    }
+                  : prevCat
+              );
+            }
+          })
+          .catch(() => {});
+      }
 
       if (activeSelection.autoSelected) {
         const fallback = (catalog?.channels || []).find(

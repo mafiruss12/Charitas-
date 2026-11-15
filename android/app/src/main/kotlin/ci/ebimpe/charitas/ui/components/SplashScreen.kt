@@ -3,8 +3,10 @@ package ci.ebimpe.charitas.ui.components
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,27 +61,31 @@ fun SplashScreen(onFinished: () -> Unit) {
                     colors = listOf(CharitasDeepNavy, CharitasRoyalNavy, Color(0xFF0A1B3B))
                 )
             )
-            .padding(32.dp),
-        contentAlignment = Alignment.Center
+            .padding(32.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
+                .align(Alignment.Center)
                 .scale(scale.value)
                 .alpha(alpha.value.coerceAtLeast(0.35f))
         ) {
             Box(
                 modifier = Modifier
-                    .size(116.dp)
+                    .size(132.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.08f)),
+                    .background(Color.White)
+                    .border(BorderStroke(3.dp, CharitasGold), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.ic_charitas_crest),
-                    contentDescription = "Blason CHARITAS",
-                    modifier = Modifier.size(88.dp)
+                    painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
+                    contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -110,5 +117,16 @@ fun SplashScreen(onFinished: () -> Unit) {
                 trackColor = Color.White.copy(alpha = 0.16f)
             )
         }
+
+        Text(
+            text = "Powered by Kevin Akoh de Kevin Tech Pro",
+            style = MaterialTheme.typography.labelSmall,
+            color = CharitasGold.copy(alpha = 0.85f),
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp)
+        )
     }
 }

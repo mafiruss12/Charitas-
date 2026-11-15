@@ -3,6 +3,7 @@ package ci.ebimpe.charitas.ui.screens
 import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import ci.ebimpe.charitas.R
 import ci.ebimpe.charitas.ui.theme.CharitasDeepNavy
@@ -166,11 +168,13 @@ fun BibleScreen(container: CharitasAppContainer) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.ic_charitas_crest),
-                    contentDescription = "Logo CHARITAS",
+                    painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
+                    contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
+                        .border(1.dp, CharitasGold, CircleShape)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {

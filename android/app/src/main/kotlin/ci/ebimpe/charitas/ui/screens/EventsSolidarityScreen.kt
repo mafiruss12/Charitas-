@@ -2,6 +2,7 @@ package ci.ebimpe.charitas.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -148,11 +150,13 @@ fun EventsSolidarityScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_charitas_crest),
-                        contentDescription = "Logo CHARITAS",
+                        painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
+                        contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
+                            .border(1.dp, CharitasGold, CircleShape)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {

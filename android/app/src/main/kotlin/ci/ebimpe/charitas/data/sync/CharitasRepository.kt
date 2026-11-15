@@ -416,11 +416,14 @@ class CharitasRepository(
             return RepoResult.Success(dto, fromCache = false)
         }
 
-        return RepoResult.Error(
-            sanitizeNetworkError(
-                iptvResult.exceptionOrNull(),
-                "Impossible de charger les chaînes religieuses iptv-org. Vérifiez Internet."
-            )
+        // 5) Fallback embarqué vérifié (ne jamais afficher 0 chaîne ou une erreur HTML 404)
+        return RepoResult.Success(
+            TvFallbackCatalog.embeddedCatalog(
+                churchId = churchId,
+                category = category,
+                search = normalizedSearch
+            ),
+            fromCache = true
         )
     }
 

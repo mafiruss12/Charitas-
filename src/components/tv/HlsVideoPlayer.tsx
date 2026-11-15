@@ -96,10 +96,10 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [useProxy, setUseProxy] = useState(false);
+  const [proxyMode, setProxyMode] = useState<'proxy' | 'direct'>('proxy');
 
   useEffect(() => {
-    setUseProxy(false);
+    setProxyMode('proxy');
   }, [source.streamUrl]);
 
   const mediaInfo = useMemo(() => parseVideoMedia(source.streamUrl), [source.streamUrl]);
@@ -112,9 +112,11 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
 
   const effectiveStreamUrl = useMemo(() => {
     if (isEmbed || !isHlsSource) return source.streamUrl;
-    // Always use backend stream proxy by default on web to eliminate CORS & Mixed Content 100%
-    return `/api/public/tv/stream-proxy?url=${encodeURIComponent(source.streamUrl)}`;
-  }, [source.streamUrl, isEmbed, isHlsSource]);
+    if (proxyMode === 'proxy') {
+      return `/api/public/tv/stream-proxy?url=${encodeURIComponent(source.streamUrl)}`;
+    }
+    return source.streamUrl;
+  }, [source.streamUrl, isEmbed, isHlsSource, proxyMode]);
 
   useEffect(() => {
     const onFsChange = () => {
@@ -299,6 +301,11 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
 
     const handleNativeError = () => {
       if (cancelled) return;
+      if (proxyMode === 'proxy' && isHlsSource) {
+        setProxyMode('direct');
+        setConnectionLabel('Connexion directe au flux...');
+        return;
+      }
       hasErrorRef.current = true;
       setIsBuffering(false);
       setIsPlaying(false);
@@ -364,6 +371,19 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (cancelled || !data.fatal) return;
 
+        const httpStatus = data.response?.code;
+
+        // If backend stream-proxy returned 404/5xx (e.g. static host), switch immediately to direct HTTPS stream
+        if (proxyMode === 'proxy' && (httpStatus === 404 || httpStatus === 502 || httpStatus === 503)) {
+          hls.destroy();
+          if (hlsRef.current === hls) {
+            hlsRef.current = null;
+          }
+          setProxyMode('direct');
+          setConnectionLabel('Connexion directe au flux...');
+          return;
+        }
+
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 2) {
           networkRetries += 1;
           setConnectionLabel('Connexion au flux...');
@@ -386,23 +406,22 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
           return;
         }
 
-        hasErrorRef.current = true;
-        setIsBuffering(false);
-        setIsPlaying(false);
-        const httpStatus = data.response?.code;
-        const isCorsOrCodec =
-          data.type === Hls.ErrorTypes.MEDIA_ERROR ||
-          (data.type === Hls.ErrorTypes.NETWORK_ERROR && !httpStatus && data.details?.includes('manifestLoadError'));
-
-        if (isCorsOrCodec && !useProxy) {
+        if (proxyMode === 'proxy') {
           hls.destroy();
           if (hlsRef.current === hls) {
             hlsRef.current = null;
           }
-          setUseProxy(true);
-          setConnectionLabel('Basculement vers le proxy de streaming sécurisé...');
+          setProxyMode('direct');
+          setConnectionLabel('Connexion directe au flux...');
           return;
         }
+
+        hasErrorRef.current = true;
+        setIsBuffering(false);
+        setIsPlaying(false);
+        const isCorsOrCodec =
+          data.type === Hls.ErrorTypes.MEDIA_ERROR ||
+          (data.type === Hls.ErrorTypes.NETWORK_ERROR && !httpStatus && data.details?.includes('manifestLoadError'));
 
         if (httpStatus && httpStatus >= 400) {
           const reason = `Le serveur de diffusion a retourné HTTP ${httpStatus}.`;
@@ -463,7 +482,7 @@ export const HlsVideoPlayer: React.FC<HlsVideoPlayerProps> = ({
       video.removeAttribute('src');
       video.load();
     };
-  }, [source.streamUrl, source.isLive, isEmbed, isHlsSource, reloadNonce]);
+  }, [source.streamUrl, effectiveStreamUrl, proxyMode, source.isLive, isEmbed, isHlsSource, reloadNonce]);
 
   useEffect(() => {
     if (!onProgress || isEmbed) return;

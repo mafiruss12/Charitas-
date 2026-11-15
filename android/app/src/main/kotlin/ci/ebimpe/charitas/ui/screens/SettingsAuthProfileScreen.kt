@@ -1,9 +1,16 @@
 package ci.ebimpe.charitas.ui.screens
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -15,15 +22,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,12 +51,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ci.ebimpe.charitas.CharitasAppContainer
 import ci.ebimpe.charitas.BuildConfig
+import ci.ebimpe.charitas.R
+import ci.ebimpe.charitas.ui.theme.CharitasDeepNavy
+import ci.ebimpe.charitas.ui.theme.CharitasGold
+import ci.ebimpe.charitas.ui.theme.CharitasRoyalNavy
 import ci.ebimpe.charitas.update.InAppUpdateChecker
 import ci.ebimpe.charitas.update.UpdateCheckResult
 import ci.ebimpe.charitas.update.AppVersionInfo
@@ -293,10 +315,107 @@ fun SettingsAuthProfileScreen(
 
 
         item {
+            val parishLeaders = listOf(
+                Triple("Ako Vince", "Responsable de la Paroisse", "0747160619" to "07 47 16 06 19"),
+                Triple("Emmanuel Tanoh", "Responsable de la Paroisse", "0747417231" to "07 47 41 72 31"),
+                Triple("Some Séraphin", "Responsable de la Paroisse", "0505627855" to "05 05 62 78 55")
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, CharitasGold.copy(alpha = 0.45f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
+                            contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .border(1.5.dp, CharitasGold, CircleShape)
+                        )
+                        Column {
+                            Text(
+                                text = "À propos & Personnes à contacter",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = CharitasRoyalNavy
+                            )
+                            Text(
+                                text = "CHARITAS · Église Saint Louis Roi d’Ebimpé",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Responsables de l’église et de l’action caritative CHARITAS à Ebimpé :",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    parishLeaders.forEach { (leaderName, leaderRole, phonePair) ->
+                        val (rawPhone, formattedPhone) = phonePair
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(CharitasRoyalNavy.copy(alpha = 0.06f))
+                                .clickable {
+                                    context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$rawPhone")))
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Phone,
+                                    contentDescription = null,
+                                    tint = CharitasRoyalNavy,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Column {
+                                    Text(leaderName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                    Text(leaderRole, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Surface(shape = RoundedCornerShape(50), color = CharitasGold) {
+                                Text(
+                                    text = formattedPhone,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = CharitasDeepNavy,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Application", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("Version installée : ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                    Text(
+                        text = "Powered by Kevin Akoh de Kevin Tech Pro",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = CharitasRoyalNavy
+                    )
                     Button(
                         enabled = !checkingUpdate,
                         onClick = {
@@ -320,6 +439,19 @@ fun SettingsAuthProfileScreen(
                     }
                 }
             }
+        }
+
+        item {
+            Text(
+                text = "Powered by Kevin Akoh de Kevin Tech Pro",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = CharitasRoyalNavy,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            )
         }
 
         feedback?.let { msg ->

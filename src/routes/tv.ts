@@ -62,7 +62,7 @@ const publicSingleProbeCooldown = new Map<number, number>();
  * Server-side HLS / Stream Proxy: bypasses browser CORS & Mixed Content restrictions
  * by fetching manifests and media segments through the Charitas backend relay.
  */
-tvRouter.get('/public/tv/stream-proxy', async (req, res) => {
+tvRouter.get(['/public/tv/stream-proxy', '/tv/stream-proxy', '/stream-proxy'], async (req, res) => {
   try {
     const rawUrl = typeof req.query.url === 'string' ? req.query.url : '';
     if (!rawUrl) {
@@ -124,7 +124,7 @@ tvRouter.get('/public/tv/stream-proxy', async (req, res) => {
   }
 });
 
-tvRouter.get('/public/tv/catalog', async (req, res) => {
+tvRouter.get(['/public/tv/catalog', '/tv/catalog', '/catalog'], async (req, res) => {
   try {
     await ensureStarterChurches();
     const requestedChurchId = req.query.churchId ? Number(req.query.churchId) : null;

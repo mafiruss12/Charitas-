@@ -40,6 +40,167 @@ object TvFallbackCatalog {
         RegexOption.IGNORE_CASE
     )
 
+    private val embeddedChannels = listOf(
+        TvChannelDto(
+            id = -101,
+            churchId = 1,
+            name = "Evandis Gospel TV",
+            category = "Gospel et louange",
+            language = "Français",
+            country = "France",
+            logoUrl = "https://i.imgur.com/v8TiqhH.png",
+            streamUrl = "https://evandis.streamakaci.tv/str_evandis_evandis/str_evandis_multi/playlist.m3u8",
+            streamFormat = "hls",
+            description = "Chaîne chrétienne francophone dédiée au gospel, à la louange et aux temps de prière.",
+            currentProgram = "Louange & Gospel en direct",
+            isRecommended = true,
+            isValidated = true,
+            isActive = true,
+            streamStatus = "operational"
+        ),
+        TvChannelDto(
+            id = -102,
+            churchId = 1,
+            name = "3ABN French",
+            category = "TV chrétiennes francophones",
+            language = "Français",
+            country = "International",
+            logoUrl = "https://i.imgur.com/B5gsM7m.png",
+            streamUrl = "https://3abn.bozztv.com/3abn2/Fre_live/smil:Fre_live.smil/playlist.m3u8",
+            streamFormat = "hls",
+            description = "Programmes chrétiens francophones : enseignements bibliques, santé et famille.",
+            currentProgram = "Émissions chrétiennes en français",
+            isRecommended = true,
+            isValidated = true,
+            isActive = true,
+            streamStatus = "operational"
+        ),
+        TvChannelDto(
+            id = -103,
+            churchId = 1,
+            name = "KTO Télévision Catholique",
+            category = "TV chrétiennes francophones",
+            language = "Français",
+            country = "France / International",
+            logoUrl = "https://i.imgur.com/b5JjC4D.png",
+            streamUrl = "https://live-kto.akamaized.net/hls/live/2033285/KTO/master.m3u8",
+            streamFormat = "hls",
+            description = "Télévision catholique francophone : messes, méditations et vie de l’Église.",
+            currentProgram = "Programmes & Messes en direct",
+            isRecommended = true,
+            isValidated = true,
+            isActive = true,
+            streamStatus = "operational"
+        ),
+        TvChannelDto(
+            id = -104,
+            churchId = 1,
+            name = "EWTN Africa-Asia",
+            category = "TV chrétiennes africaines",
+            language = "Anglais / Afrique",
+            country = "Afrique",
+            logoUrl = "https://play-lh.googleusercontent.com/3716tvZCgzpIt-X1giV8jKwCdC8zwOI4eMUfO_ETWzNX6eGKIi2RiUK9a_fr6BCzjw",
+            streamUrl = "https://cdn3.wowza.com/1/ZVBYYXFLLzE0c3NC/Qk1FMURC/hls/live/playlist.m3u8",
+            streamFormat = "hls",
+            description = "Réseau catholique mondial : messes quotidiennes, chapelet et catéchèse.",
+            currentProgram = "EWTN Catholic Live Feed",
+            isRecommended = true,
+            isValidated = true,
+            isActive = true,
+            streamStatus = "operational"
+        ),
+        TvChannelDto(
+            id = -105,
+            churchId = 1,
+            name = "Hope Channel Africa",
+            category = "TV chrétiennes africaines",
+            language = "Anglais / Afrique",
+            country = "Afrique du Sud",
+            logoUrl = "https://i.imgur.com/SFacyYO.png",
+            streamUrl = "https://jstre.am/live/jsl:i1onRBELcGV.m3u8",
+            streamFormat = "hls",
+            description = "Télévision chrétienne africaine axée sur l’espérance et l’Évangile.",
+            currentProgram = "Hope Africa Direct",
+            isRecommended = true,
+            isValidated = true,
+            isActive = true,
+            streamStatus = "operational"
+        ),
+        TvChannelDto(
+            id = -106,
+            churchId = 1,
+            name = "Catholic TV",
+            category = "TV chrétiennes internationales",
+            language = "Anglais",
+            country = "États-Unis",
+            logoUrl = "https://i.imgur.com/EL0rWD3.png",
+            streamUrl = "https://catholictvhd-lh.akamaized.net/hls/live/2043390/CTVLiveHD/master.m3u8",
+            streamFormat = "hls",
+            description = "Liturgie catholique, messes en direct et méditations.",
+            currentProgram = "Messe & Vie de l’Église",
+            isRecommended = false,
+            isValidated = true,
+            isActive = true,
+            streamStatus = "operational"
+        ),
+        TvChannelDto(
+            id = -107,
+            churchId = 1,
+            name = "Catholic Faith Network",
+            category = "Cultes en direct",
+            language = "Anglais",
+            country = "États-Unis",
+            logoUrl = "https://upload.wikimedia.org/wikipedia/en/0/07/Catholic_Faith_Network_2018.png",
+            streamUrl = "https://uni8rtmp.tulix.tv/cfntv/cfntv/playlist.m3u8",
+            streamFormat = "hls",
+            description = "Célébrations eucharistiques en direct et commentaires bibliques.",
+            currentProgram = "Célébrations en direct",
+            isRecommended = false,
+            isValidated = true,
+            isActive = true,
+            streamStatus = "operational"
+        ),
+        TvChannelDto(
+            id = -108,
+            churchId = 1,
+            name = "Shalom World Prayer",
+            category = "Prédications",
+            language = "Anglais",
+            country = "International",
+            logoUrl = "https://i.imgur.com/uUrTto3.png",
+            streamUrl = "https://broadcaster-1.cclouds.in/srt-4/channel4_abr/playlist.m3u8",
+            streamFormat = "hls",
+            description = "Chaîne catholique d’adoration, prédications, chapelet et intercession.",
+            currentProgram = "Intercession & Prédications",
+            isRecommended = false,
+            isValidated = true,
+            isActive = true,
+            streamStatus = "operational"
+        )
+    )
+
+    fun embeddedCatalog(
+        churchId: Int = 1,
+        category: String? = null,
+        search: String? = null
+    ): PublicTvCatalogResponseDto {
+        return filterCatalog(
+            PublicTvCatalogResponseDto(
+                churchId = churchId,
+                churchName = "CHARITAS TV — Église Saint Louis Roi d’Ebimpé",
+                verifiedAt = null,
+                categories = embeddedChannels.map { it.category }.distinct().sorted(),
+                channels = embeddedChannels.map { it.copy(churchId = churchId) },
+                recommendedChannels = embeddedChannels.filter { it.isRecommended }.map { it.copy(churchId = churchId) },
+                broadcasts = emptyList()
+            ),
+            churchId = churchId,
+            category = category,
+            search = search,
+            maxChannels = 250
+        )
+    }
+
     suspend fun load(
         churchId: Int = 0,
         category: String? = null,
@@ -52,9 +213,12 @@ object TvFallbackCatalog {
         val base = if (!forceRefresh && cached != null && now - cacheAtMs < CACHE_TTL_MS) {
             cached
         } else {
-            val entries = fetchAndParseM3u(RELIGIOUS_M3U_URL)
-                .filter { isChristianReligious(it.name, it.group) }
-            var channels = entries.mapIndexed { index, e ->
+            val entries = runCatching {
+                fetchAndParseM3u(RELIGIOUS_M3U_URL)
+                    .filter { isChristianReligious(it.name, it.group) }
+            }.getOrDefault(emptyList())
+
+            var parsedChannels = entries.mapIndexed { index, e ->
                 TvChannelDto(
                     id = -(index + 1),
                     churchId = churchId,
@@ -72,13 +236,17 @@ object TvFallbackCatalog {
                     streamStatus = "operational"
                 )
             }
-            channels = channels.sortedByDescending { ch ->
+            parsedChannels = parsedChannels.sortedByDescending { ch ->
                 preferredKeywords.count { k -> ch.name.lowercase().contains(k) } * 10 +
                     (if (ch.streamUrl.startsWith("https", true)) 5 else 0)
             }
+
+            val channels = (embeddedChannels.map { it.copy(churchId = churchId) } + parsedChannels)
+                .distinctBy { it.streamUrl }
+
             val dto = PublicTvCatalogResponseDto(
                 churchId = churchId,
-                churchName = "CHARITAS TV — Chaînes religieuses (iptv-org)",
+                churchName = "CHARITAS TV — Église Saint Louis Roi d’Ebimpé",
                 verifiedAt = null,
                 categories = channels.map { it.category }.distinct().sorted(),
                 channels = channels,
@@ -90,6 +258,16 @@ object TvFallbackCatalog {
             dto
         }
 
+        filterCatalog(base, churchId, category, search, maxChannels)
+    }
+
+    private fun filterCatalog(
+        base: PublicTvCatalogResponseDto,
+        churchId: Int,
+        category: String?,
+        search: String?,
+        maxChannels: Int
+    ): PublicTvCatalogResponseDto {
         var channels = base.channels
         if (!category.isNullOrBlank() &&
             !category.equals("Toutes", true) &&
@@ -107,9 +285,9 @@ object TvFallbackCatalog {
             }
         }
         channels = channels.take(maxChannels)
-        base.copy(
+        return base.copy(
             churchId = churchId,
-            categories = channels.map { it.category }.distinct().sorted(),
+            categories = base.categories.ifEmpty { channels.map { it.category }.distinct().sorted() },
             channels = channels,
             recommendedChannels = channels.filter { it.isRecommended }.ifEmpty { channels.take(8) }
         )

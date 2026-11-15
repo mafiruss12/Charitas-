@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -104,9 +105,15 @@ fun TvScreen(container: CharitasAppContainer) {
                 if (activeChannel == null) {
                     activeChannel = res.data.recommendedChannels.firstOrNull() ?: res.data.channels.firstOrNull()
                 }
-                message = if (res.fromCache) "Catalogue TV affiché depuis le cache hors connexion." else null
+                message = if (res.fromCache) "Catalogue TV affiché depuis la sélection hors ligne." else null
             }
-            is RepoResult.Error -> message = res.message
+            is RepoResult.Error -> {
+                message = if (res.message.contains("<html", ignoreCase = true) || res.message.contains("<!doctype", ignoreCase = true)) {
+                    "Catalogue TV momentanément indisponible."
+                } else {
+                    res.message
+                }
+            }
         }
         loading = false
     }
@@ -144,10 +151,11 @@ fun TvScreen(container: CharitasAppContainer) {
                     modifier = Modifier.weight(1f)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_charitas_crest),
-                        contentDescription = "Logo CHARITAS",
+                        painter = painterResource(id = R.drawable.logo_saint_louis_ebimpe),
+                        contentDescription = "Logo Paroisse Saint Louis Roi d’Ebimpé",
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                     )
                     Spacer(modifier = Modifier.width(10.dp))

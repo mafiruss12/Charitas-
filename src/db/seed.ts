@@ -221,6 +221,13 @@ export async function ensureStarterChurches(): Promise<void> {
   try {
     const existing = await db.select({ id: churches.id }).from(churches).limit(1);
     if (existing.length > 0) {
+      await db
+        .update(churches)
+        .set({
+          logoUrl: '/assets/aistudio/IMG-20261115-WA0014_7d3ce8f2.jpg',
+          phone: '0747160619 / 0747417231 / 0505627855',
+        })
+        .where(eq(churches.logoUrl, '/src/assets/images/charitas_emblem_crest_1794525619241.jpg'));
       await ensureStarterTvCatalogForEbimpe();
       seededOnce = true;
       return;
@@ -239,9 +246,9 @@ export async function ensureStarterChurches(): Promise<void> {
           address: 'Quartier Ebimpé, Commune d’Anyama',
           city: 'Ebimpé / Abidjan',
           country: "Côte d'Ivoire",
-          phone: '+225 27 22 41 00 18',
+          phone: '0747160619 / 0747417231 / 0505627855',
           email: 'charitas@saintlouis-ebimpe.ci',
-          logoUrl: '/src/assets/images/charitas_emblem_crest_1794525619241.jpg',
+          logoUrl: '/assets/aistudio/IMG-20261115-WA0014_7d3ce8f2.jpg',
           bannerUrl: '/src/assets/images/charitas_parish_hero_1794525618732.jpg',
           primaryColor: '#1B365D',
           accentColor: '#881337',
@@ -266,7 +273,7 @@ export async function ensureStarterChurches(): Promise<void> {
           country: "Côte d'Ivoire",
           phone: '+225 27 30 64 12 90',
           email: 'accueil@espoirvivant.ci',
-          logoUrl: '/src/assets/images/charitas_emblem_crest_1794525619241.jpg',
+          logoUrl: '/assets/aistudio/IMG-20261115-WA0014_7d3ce8f2.jpg',
           bannerUrl: '/src/assets/images/charitas_food_solidarity_1794525620555.jpg',
           primaryColor: '#1B365D',
           accentColor: '#B45309',
